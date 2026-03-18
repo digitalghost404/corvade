@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { fetchTraces } from '@/lib/api';
+import DetailInspector from '@/components/DetailInspector';
 
 interface Trace {
   id: string;
@@ -37,6 +38,7 @@ export default function Timeline() {
   const [agentFilter, setAgentFilter] = useState('');
   const [modelFilter, setModelFilter] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
+  const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -98,7 +100,7 @@ export default function Timeline() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-zinc-800 overflow-hidden">
+      <div className="rounded-lg border border-zinc-800 overflow-hidden" role="grid" aria-label="Traces">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-zinc-900 text-zinc-400 text-left">
@@ -128,7 +130,14 @@ export default function Timeline() {
               filtered.map((trace) => (
                 <tr
                   key={trace.id}
-                  className="border-t border-zinc-800 hover:bg-zinc-900/50 transition-colors"
+                  onClick={() =>
+                    setSelectedTraceId((prev) => (prev === trace.id ? null : trace.id))
+                  }
+                  className={`border-t border-zinc-800 cursor-pointer transition-colors ${
+                    selectedTraceId === trace.id
+                      ? 'bg-zinc-800/70'
+                      : 'hover:bg-zinc-900/50'
+                  }`}
                 >
                   <td className="px-4 py-3 font-mono text-zinc-400 text-xs">
                     {formatTime(trace.timestamp)}
@@ -155,6 +164,13 @@ export default function Timeline() {
           </tbody>
         </table>
       </div>
+      {/* Detail Inspector */}
+      {selectedTraceId && (
+        <DetailInspector
+          traceId={selectedTraceId}
+          onClose={() => setSelectedTraceId(null)}
+        />
+      )}
     </div>
   );
 }
