@@ -17,3 +17,6 @@ dashboard/out/
 # OS
 .DS_Store
 .env
+
+# Brainstorm mockups
+.superpowers/
