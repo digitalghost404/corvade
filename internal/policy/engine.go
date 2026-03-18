@@ -174,14 +174,6 @@ func (e *Engine) Evaluate(ctx EvalContext) EvalResult {
 	return result
 }
 
-// sendWebhook dispatches violations to the configured webhook URL.
-// Filters by the events config. Implementation deferred to Task 5.
-func (e *Engine) sendWebhook(violations []Violation, ctx EvalContext) {
-	// Webhook delivery is implemented in Task 5.
-	_ = violations
-	_ = ctx
-}
-
 // Start begins the file watcher goroutine that polls for policy changes.
 func (e *Engine) Start() {
 	go func() {
