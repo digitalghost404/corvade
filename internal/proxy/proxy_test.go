@@ -262,7 +262,7 @@ func TestCaptureTraceNilEmitter(t *testing.T) {
 
 	srv.captureTrace("openai", "gpt-4", `{"prompt":"hi"}`, `{"text":"hello"}`,
 		200, &providers.ResponseInfo{PromptTokens: 10, CompletionTokens: 5}, 100,
-		nil, "agent-1", "sess-1", "step-1")
+		nil, "agent-1", "sess-1", "step-1", nil)
 
 	// Let async write complete (captureTrace is called synchronously in tests)
 	time.Sleep(50 * time.Millisecond)
@@ -293,7 +293,7 @@ func TestCaptureTraceNilEmitter(t *testing.T) {
 func TestCaptureTraceNilStore(t *testing.T) {
 	srv := &Server{store: nil, calc: nil, emitter: nil}
 	// Should not panic
-	srv.captureTrace("openai", "gpt-4", `{}`, `{}`, 200, nil, 100, nil, "", "", "")
+	srv.captureTrace("openai", "gpt-4", `{}`, `{}`, 200, nil, 100, nil, "", "", "", nil)
 }
 
 // --- captureTrace with emitter ---
@@ -319,7 +319,7 @@ func TestCaptureTraceWithEmitter(t *testing.T) {
 
 	srv.captureTrace("openai", "gpt-4", `{}`, `{}`, 200,
 		&providers.ResponseInfo{PromptTokens: 10, CompletionTokens: 5}, 100,
-		nil, "", "", "")
+		nil, "", "", "", nil)
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -345,7 +345,7 @@ func TestCaptureTraceWithCachedTokens(t *testing.T) {
 
 	srv.captureTrace("openai", "gpt-4", `{}`, `{}`, 200,
 		&providers.ResponseInfo{PromptTokens: 100, CompletionTokens: 50, CachedTokens: 25},
-		100, nil, "", "", "")
+		100, nil, "", "", "", nil)
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -369,7 +369,7 @@ func TestCaptureTraceNilRespInfo(t *testing.T) {
 	defer store.Close()
 
 	srv := NewServer(store, cost.NewCalculator(nil), nil)
-	srv.captureTrace("openai", "gpt-4", `{}`, `{}`, 200, nil, 100, nil, "", "", "")
+	srv.captureTrace("openai", "gpt-4", `{}`, `{}`, 200, nil, 100, nil, "", "", "", nil)
 
 	time.Sleep(50 * time.Millisecond)
 
@@ -506,7 +506,7 @@ func TestCaptureTraceStoreError(t *testing.T) {
 	// Should not panic, just log the error
 	srv.captureTrace("openai", "gpt-4", `{}`, `{}`, 200,
 		&providers.ResponseInfo{PromptTokens: 10, CompletionTokens: 5}, 100,
-		nil, "", "", "")
+		nil, "", "", "", nil)
 }
 
 // --- Failed to read request body ---

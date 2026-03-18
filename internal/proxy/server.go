@@ -9,8 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"encoding/json"
+
 	"github.com/corvade/corvade/internal/capture"
 	"github.com/corvade/corvade/internal/cost"
+	"github.com/corvade/corvade/internal/policy"
 	"github.com/corvade/corvade/internal/proxy/providers"
 )
 
@@ -24,6 +27,7 @@ type Server struct {
 	store        *capture.Store
 	calc         *cost.Calculator
 	emitter      EventEmitter
+	policyEngine *policy.Engine
 	upstreamURLs map[string]string
 	mux          *http.ServeMux
 }
@@ -47,6 +51,11 @@ func NewServer(store *capture.Store, calc *cost.Calculator, emitter EventEmitter
 // SetUpstreamURL overrides the upstream URL for a provider (useful for testing).
 func (s *Server) SetUpstreamURL(provider, url string) {
 	s.upstreamURLs[provider] = url
+}
+
+// SetPolicyEngine attaches a policy engine to the proxy for request evaluation.
+func (s *Server) SetPolicyEngine(e *policy.Engine) {
+	s.policyEngine = e
 }
 
 // ServeHTTP delegates to the internal mux.
@@ -124,6 +133,43 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	if reqInfo == nil {
 		reqInfo = &providers.RequestInfo{}
+	}
+
+	// Policy evaluation
+	var policyViolations []policy.Violation
+
+	if s.policyEngine != nil {
+		evalCtx := policy.EvalContext{
+			Provider:      provider,
+			Model:         reqInfo.Model,
+			Agent:         agent,
+			Session:       session,
+			Step:          step,
+			RequestBody:   reqBody,
+			TokenEstimate: policy.EstimateTokens(reqBody),
+			EstimatedCost: s.calc.Calculate(reqInfo.Model, policy.EstimateTokens(reqBody), 0),
+		}
+		result := s.policyEngine.Evaluate(evalCtx)
+
+		if result.Blocked && result.Modified == nil {
+			errJSON := writeProviderError(w, provider, result.Violations)
+			go s.captureTrace(provider, reqInfo.Model, string(reqBody), errJSON, 499,
+				nil, int(time.Since(start).Milliseconds()), apiKeyHash,
+				agent, session, step, result.Violations)
+			if s.emitter != nil {
+				s.emitter.Emit("trace:blocked", map[string]interface{}{
+					"model": reqInfo.Model, "agent": agent,
+					"policy_violations": result.Violations,
+				})
+			}
+			return
+		}
+
+		if result.Modified != nil {
+			reqBody = result.Modified
+		}
+
+		policyViolations = result.Violations
 	}
 
 	// Build upstream request
@@ -211,7 +257,7 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Capture trace asynchronously
 	go s.captureTrace(provider, reqInfo.Model, string(reqBody), assembledResponse,
-		resp.StatusCode, respInfo, latency, apiKeyHash, agent, session, step)
+		resp.StatusCode, respInfo, latency, apiKeyHash, agent, session, step, policyViolations)
 }
 
 // captureTrace writes a trace to SQLite in the background. Best-effort — failures
@@ -223,6 +269,7 @@ func (s *Server) captureTrace(
 	latencyMS int,
 	apiKeyHash *string,
 	agent, session, step string,
+	policyViolations []policy.Violation,
 ) {
 	if s.store == nil {
 		return
@@ -236,6 +283,13 @@ func (s *Server) captureTrace(
 		StatusCode: statusCode,
 		LatencyMS:  &latencyMS,
 		APIKeyHash: apiKeyHash,
+	}
+
+	if len(policyViolations) > 0 {
+		if pvJSON, err := json.Marshal(policyViolations); err == nil {
+			pvStr := string(pvJSON)
+			tr.PolicyViolations = &pvStr
+		}
 	}
 
 	if agent != "" {
@@ -277,4 +331,27 @@ func (s *Server) captureTrace(
 			"model":    model,
 		})
 	}
+}
+
+// writeProviderError writes a policy-violation error response in the format expected
+// by the given provider's SDK (OpenAI or Anthropic). Returns the JSON string written.
+func writeProviderError(w http.ResponseWriter, provider string, violations []policy.Violation) string {
+	msg := "Request blocked by Corvade policy"
+	if len(violations) > 0 {
+		msg += ": " + violations[0].Message
+	}
+
+	var errJSON string
+	switch provider {
+	case "anthropic":
+		errJSON = fmt.Sprintf(`{"type":"error","error":{"type":"policy_violation","message":"%s"}}`, msg)
+	default: // openai
+		errJSON = fmt.Sprintf(`{"error":{"message":"%s","type":"policy_violation","code":"corvade_policy_blocked"}}`, msg)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Corvade-Policy-Violation", "true")
+	w.WriteHeader(400)
+	w.Write([]byte(errJSON))
+	return errJSON
 }
