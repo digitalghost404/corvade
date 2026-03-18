@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-//go:embed dashboard_dist
+//go:embed all:dashboard_dist
 var dashboardFS embed.FS
 
 // DashboardHandler returns an http.Handler that serves the embedded Next.js
