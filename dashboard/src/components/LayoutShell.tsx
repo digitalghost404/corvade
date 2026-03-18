@@ -7,6 +7,7 @@ import KeyboardHelp from './KeyboardHelp';
 import CommandPalette from './CommandPalette';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import TopologyCanvas from './TopologyCanvas';
+import CursorGlow from './CursorGlow';
 
 // Boot stages:
 //  0 → black screen (topology only)
@@ -122,6 +123,9 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-zinc-950">
       {/* Topology canvas is always visible — it renders behind everything */}
       <TopologyCanvas />
+
+      {/* Cursor glow: sits above the canvas (z-index 1) but below all content */}
+      <CursorGlow />
 
       {/* Header: slides down from above during stage 1, eye flashes at stage 2 */}
       <div className={`${headerClass} ${eyeClass}`.trim()}>

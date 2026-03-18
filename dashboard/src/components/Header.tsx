@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { getWS } from '@/lib/wsClient';
+import { useTraceSound } from '@/hooks/useTraceSound';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4401';
 
@@ -94,12 +95,41 @@ function Waveform({ active, spiking }: { active: boolean; spiking: boolean }) {
   );
 }
 
+function SpeakerIcon({ muted }: { muted: boolean }) {
+  if (muted) {
+    return (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M11 5L6 9H2v6h4l5 4V5z" fill="currentColor" />
+        <line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        <line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M11 5L6 9H2v6h4l5 4V5z" fill="currentColor" />
+      <path d="M15.54 8.46a5 5 0 0 1 0 7.07" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export default function Header() {
   const [traceCount, setTraceCount] = useState<number | null>(null);
   const [cost, setCost] = useState<number | null>(null);
   const [noticing, setNoticing] = useState(false);
+  const [soundOn, setSoundOn] = useState(false);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pupilRef = useRef<SVGPathElement>(null);
+  const { tick, setEnabled } = useTraceSound();
+
+  const toggleSound = useCallback(() => {
+    setSoundOn((prev) => {
+      const next = !prev;
+      setEnabled(next);
+      return next;
+    });
+  }, [setEnabled]);
 
   useEffect(() => {
     const handleMouse = (e: MouseEvent) => {
@@ -133,6 +163,7 @@ export default function Header() {
         setCost((c) => (c ?? 0) + data.cost!);
       }
       setNoticing(true);
+      tick();
       if (noticeTimer.current) clearTimeout(noticeTimer.current);
       noticeTimer.current = setTimeout(() => setNoticing(false), 300);
     };
@@ -167,6 +198,16 @@ export default function Header() {
         <span className="text-xs tabular-nums text-zinc-400">
           {statsText}
         </span>
+        {/* Sound toggle */}
+        <button
+          onClick={toggleSound}
+          aria-label={soundOn ? 'Disable trace sound' : 'Enable trace sound'}
+          aria-pressed={soundOn}
+          className="flex items-center justify-center rounded p-0.5 transition-colors"
+          style={{ color: soundOn ? '#8b5cf6' : '#52525b' }}
+        >
+          <SpeakerIcon muted={!soundOn} />
+        </button>
       </div>
     </header>
   );
