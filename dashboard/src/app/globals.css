@@ -245,3 +245,26 @@ body {
   background-size: 100% 100%, 24px 24px;
   color: #fafafa;
 }
+
+/* ── Boot sequence ─────────────────────────────────────────────────────────── */
+
+@keyframes slide-down {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+@keyframes boot-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes eye-open {
+  0%   { transform: scale(0.5); opacity: 0; filter: drop-shadow(0 0 20px #8b5cf6); }
+  60%  { transform: scale(1.1); opacity: 1; filter: drop-shadow(0 0 30px #8b5cf6); }
+  100% { transform: scale(1);   opacity: 1; filter: drop-shadow(0 0 4px rgba(139, 92, 246, 0.4)); }
+}
+
+.boot-hidden        { opacity: 0; pointer-events: none; }
+.boot-header-enter  { animation: slide-down   300ms ease-out forwards; }
+.boot-content-enter { animation: boot-fade-in 400ms ease-out forwards; }
+.boot-eye-open      { animation: eye-open     400ms ease-out forwards; }
