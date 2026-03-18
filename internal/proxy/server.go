@@ -157,38 +157,60 @@ func (s *Server) handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Read upstream response
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		http.Error(w, "failed to read upstream response", http.StatusBadGateway)
-		return
-	}
-
-	latency := int(time.Since(start).Milliseconds())
-
-	// Parse response info (tokens)
-	var respInfo *providers.ResponseInfo
-	switch provider {
-	case "openai":
-		respInfo, _ = providers.OpenAIParseResponse(respBody)
-	case "anthropic":
-		respInfo, _ = providers.AnthropicParseResponse(respBody)
-	}
-	if respInfo == nil {
-		respInfo = &providers.ResponseInfo{}
-	}
-
-	// Write response to client
+	// Copy response headers to the client before writing the body.
 	for key, vals := range resp.Header {
 		for _, v := range vals {
 			w.Header().Add(key, v)
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	w.Write(respBody)
+
+	var assembledResponse string
+	var respInfo *providers.ResponseInfo
+
+	isSSE := strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream")
+
+	if isSSE {
+		// Stream SSE chunks to the client in real-time, assembling content for capture.
+		assembled, sseUsage, streamErr := streamSSE(resp.Body, w)
+		if streamErr != nil {
+			log.Printf("SSE stream error: %v", streamErr)
+		}
+		assembledResponse = assembled
+
+		if sseUsage != nil {
+			respInfo = &providers.ResponseInfo{
+				PromptTokens:     sseUsage.PromptTokens,
+				CompletionTokens: sseUsage.CompletionTokens,
+				CachedTokens:     sseUsage.CachedTokens,
+			}
+		}
+	} else {
+		// Buffered path: read full response then write to client.
+		respBody, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			log.Printf("failed to read upstream response: %v", readErr)
+			return
+		}
+		assembledResponse = string(respBody)
+		w.Write(respBody)
+
+		switch provider {
+		case "openai":
+			respInfo, _ = providers.OpenAIParseResponse(respBody)
+		case "anthropic":
+			respInfo, _ = providers.AnthropicParseResponse(respBody)
+		}
+	}
+
+	if respInfo == nil {
+		respInfo = &providers.ResponseInfo{}
+	}
+
+	latency := int(time.Since(start).Milliseconds())
 
 	// Capture trace asynchronously
-	go s.captureTrace(provider, reqInfo.Model, string(reqBody), string(respBody),
+	go s.captureTrace(provider, reqInfo.Model, string(reqBody), assembledResponse,
 		resp.StatusCode, respInfo, latency, apiKeyHash, agent, session, step)
 }
 
