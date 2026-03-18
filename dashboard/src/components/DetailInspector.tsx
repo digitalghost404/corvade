@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { fetchTrace } from '@/lib/api';
+import PolicyTab from '@/components/PolicyTab';
 
 interface TraceDetail {
   id: string;
@@ -18,6 +19,7 @@ interface TraceDetail {
   tokens_cached: number | null;
   request: string;
   response: string | null;
+  policy_violations: string | null;
 }
 
 interface Props {
@@ -25,7 +27,7 @@ interface Props {
   onClose: () => void;
 }
 
-type Tab = 'request' | 'response';
+type Tab = 'request' | 'response' | 'policy';
 
 function statusColor(status: number): string {
   if (status === 429) return 'text-yellow-400 bg-yellow-400/10';
@@ -209,25 +211,55 @@ export default function DetailInspector({ traceId, onClose }: Props) {
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-zinc-800 bg-zinc-900/20">
-              <button className={tabClass(tab === 'request')} onClick={() => setTab('request')}>
-                Request
-                {trace.tokens_prompt != null && (
-                  <span className="text-zinc-500 text-xs ml-1">{trace.tokens_prompt} tok</span>
-                )}
-              </button>
-              <button className={tabClass(tab === 'response')} onClick={() => setTab('response')}>
-                Response
-                {trace.tokens_completion != null && (
-                  <span className="text-zinc-500 text-xs ml-1">{trace.tokens_completion} tok</span>
-                )}
-              </button>
-            </div>
+            {(() => {
+              const parsedViolations = (() => {
+                if (!trace.policy_violations) return null;
+                try {
+                  const v = JSON.parse(trace.policy_violations);
+                  return Array.isArray(v) && v.length > 0 ? v : null;
+                } catch {
+                  return null;
+                }
+              })();
+              const showPolicyTab = parsedViolations !== null;
 
-            {/* JSON viewer */}
-            <div className="bg-zinc-950">
-              <JsonViewer data={tab === 'request' ? trace.request : trace.response} />
-            </div>
+              return (
+                <>
+                  <div className="flex border-b border-zinc-800 bg-zinc-900/20">
+                    <button className={tabClass(tab === 'request')} onClick={() => setTab('request')}>
+                      Request
+                      {trace.tokens_prompt != null && (
+                        <span className="text-zinc-500 text-xs ml-1">{trace.tokens_prompt} tok</span>
+                      )}
+                    </button>
+                    <button className={tabClass(tab === 'response')} onClick={() => setTab('response')}>
+                      Response
+                      {trace.tokens_completion != null && (
+                        <span className="text-zinc-500 text-xs ml-1">{trace.tokens_completion} tok</span>
+                      )}
+                    </button>
+                    {showPolicyTab && (
+                      <button className={tabClass(tab === 'policy')} onClick={() => setTab('policy')}>
+                        Policy
+                        <span className="text-zinc-500 text-xs ml-1">{parsedViolations.length}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Tab content */}
+                  <div className="bg-zinc-950">
+                    {tab === 'policy' && parsedViolations ? (
+                      <PolicyTab
+                        violations={parsedViolations}
+                        blocked={trace.status_code === 499}
+                      />
+                    ) : (
+                      <JsonViewer data={tab === 'request' ? trace.request : trace.response} />
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </>
         )}
       </div>

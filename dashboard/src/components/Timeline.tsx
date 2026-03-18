@@ -6,6 +6,7 @@ import DetailInspector from '@/components/DetailInspector';
 import SkeletonRows from '@/components/SkeletonRows';
 import EmptyState from '@/components/EmptyState';
 import AgentAvatar from '@/components/AgentAvatar';
+import PolicyBadge from '@/components/PolicyBadge';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { getWS } from '@/lib/wsClient';
 
@@ -21,6 +22,14 @@ interface Trace {
   status_code: number;
   response: string | null;
   request: string;
+  policy_violations: string | null;
+}
+
+interface PolicyViolation {
+  rule: string;
+  type: string;
+  mode: string;
+  message: string;
 }
 
 // Extract all tool_call IDs from a response JSON string.
@@ -57,9 +66,11 @@ function statusColor(status: number): string {
   return 'text-zinc-400';
 }
 
-function urgencyClass(status: number): string {
+function urgencyClass(status: number, hasViolations: boolean): string {
+  if (status === 499) return 'row-error';
   if (status === 429) return 'row-rate-limit';
   if (status >= 400) return 'row-error';
+  if (hasViolations) return 'row-error';
   return '';
 }
 
@@ -105,6 +116,7 @@ export default function Timeline() {
   const [agentFilter, setAgentFilter] = useState('');
   const [modelFilter, setModelFilter] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
+  const [violationsOnly, setViolationsOnly] = useState(false);
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   // ID of the most recently arrived trace — drives the cinematic arrival animation
@@ -120,9 +132,11 @@ export default function Timeline() {
   const agentFilterRef = useRef(agentFilter);
   const modelFilterRef = useRef(modelFilter);
   const searchFilterRef = useRef(searchFilter);
+  const violationsOnlyRef = useRef(violationsOnly);
   agentFilterRef.current = agentFilter;
   modelFilterRef.current = modelFilter;
   searchFilterRef.current = searchFilter;
+  violationsOnlyRef.current = violationsOnly;
 
   const load = useCallback(async () => {
     try {
@@ -130,6 +144,7 @@ export default function Timeline() {
       if (agentFilterRef.current) params.agent = agentFilterRef.current;
       if (modelFilterRef.current) params.model = modelFilterRef.current;
       if (searchFilterRef.current) params.search = searchFilterRef.current;
+      if (violationsOnlyRef.current) params.has_violations = 'true';
       const data = await fetchTraces(Object.keys(params).length ? params : undefined);
       setTraces(Array.isArray(data) ? data : []);
     } catch {
@@ -145,7 +160,7 @@ export default function Timeline() {
       load();
     }, 300);
     return () => clearTimeout(timer);
-  }, [agentFilter, modelFilter, searchFilter, load]);
+  }, [agentFilter, modelFilter, searchFilter, violationsOnly, load]);
 
   // Subscribe to trace:new to trigger reload + cinematic arrival on the new row
   useEffect(() => {
@@ -174,12 +189,13 @@ export default function Timeline() {
     }
   }, [selectedIndex]);
 
-  const hasFilters = agentFilter || modelFilter || searchFilter;
+  const hasFilters = agentFilter || modelFilter || searchFilter || violationsOnly;
 
   function clearFilters() {
     setAgentFilter('');
     setModelFilter('');
     setSearchFilter('');
+    setViolationsOnly(false);
   }
 
   const openInspector = useCallback(() => {
@@ -255,6 +271,17 @@ export default function Timeline() {
           onChange={(e) => setSearchFilter(e.target.value)}
           className={inputClass}
         />
+        <button
+          type="button"
+          onClick={() => setViolationsOnly((v) => !v)}
+          className={`px-3 py-1.5 text-sm rounded border transition-colors cursor-pointer ${
+            violationsOnly
+              ? 'bg-violet-500/20 border-violet-500/50 text-violet-300'
+              : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          Violations
+        </button>
         {hasFilters && (
           <button
             type="button"
@@ -303,7 +330,16 @@ export default function Timeline() {
                     const isKeyboardSelected = selectedIndex === index;
                     const isEven = index % 2 === 0;
                     const isArriving = arriveTraceId === trace.id;
-                    const errorClass = urgencyClass(trace.status_code);
+                    const violations: PolicyViolation[] = trace.policy_violations
+                      ? JSON.parse(trace.policy_violations)
+                      : null;
+                    const hasViolations = Array.isArray(violations) && violations.length > 0;
+                    const violationMode: 'enforce' | 'observe' | null = hasViolations
+                      ? violations.some((v) => v.mode === 'enforce')
+                        ? 'enforce'
+                        : 'observe'
+                      : null;
+                    const errorClass = urgencyClass(trace.status_code, hasViolations);
                     const traceTokens = (trace.tokens_prompt || 0) + (trace.tokens_completion || 0);
                     const barWidth = `${((traceTokens / maxTokens) * 100).toFixed(1)}%`;
 
@@ -370,8 +406,11 @@ export default function Timeline() {
                           {formatLatency(trace.latency_ms)}
                         </td>
                         <td className="px-4 py-2 text-center">
-                          <span className={`font-mono font-medium ${statusColor(trace.status_code)}`}>
-                            {trace.status_code}
+                          <span className="inline-flex items-center justify-center gap-1.5">
+                            {violationMode && <PolicyBadge mode={violationMode} />}
+                            <span className={`font-mono font-medium ${statusColor(trace.status_code)}`}>
+                              {trace.status_code}
+                            </span>
                           </span>
                         </td>
                       </tr>

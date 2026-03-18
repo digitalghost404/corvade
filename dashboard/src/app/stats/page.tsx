@@ -15,6 +15,8 @@ interface StatsData {
   total_tokens: number;
   by_model: Record<string, number>;
   by_agent: Record<string, number>;
+  violations_by_rule?: Record<string, number>;
+  violations_by_mode?: Record<string, number>;
 }
 
 interface Trace {
@@ -228,6 +230,16 @@ export default function StatsPage() {
   const maxModel = byModelEntries[0]?.[1] ?? 1;
   const maxAgent = byAgentEntries[0]?.[1] ?? 1;
 
+  const violationsByRuleEntries = stats
+    ? Object.entries(stats.violations_by_rule ?? {}).sort((a, b) => b[1] - a[1])
+    : [];
+  const violationsByModeEntries = stats
+    ? Object.entries(stats.violations_by_mode ?? {}).sort((a, b) => b[1] - a[1])
+    : [];
+  const maxViolationRule = violationsByRuleEntries[0]?.[1] ?? 1;
+  const maxViolationMode = violationsByModeEntries[0]?.[1] ?? 1;
+  const hasViolationsData = violationsByRuleEntries.length > 0;
+
   const avgCost =
     stats && stats.trace_count > 0
       ? stats.total_cost / stats.trace_count
@@ -314,6 +326,47 @@ export default function StatsPage() {
                   />
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Policy Violations */}
+          {hasViolationsData && (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4 space-y-4">
+              <p className="text-zinc-300 font-semibold text-sm uppercase tracking-wider">
+                Policy Violations
+              </p>
+
+              {/* By Rule */}
+              <div>
+                <p className="text-zinc-500 text-xs uppercase tracking-wider mb-2">By Rule</p>
+                <div className="space-y-2">
+                  {violationsByRuleEntries.map(([rule, count]) => (
+                    <BreakdownRow
+                      key={rule}
+                      name={rule}
+                      count={count}
+                      maxCount={maxViolationRule}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* By Mode */}
+              {violationsByModeEntries.length > 0 && (
+                <div>
+                  <p className="text-zinc-500 text-xs uppercase tracking-wider mb-2">By Mode</p>
+                  <div className="space-y-2">
+                    {violationsByModeEntries.map(([mode, count]) => (
+                      <BreakdownRow
+                        key={mode}
+                        name={mode}
+                        count={count}
+                        maxCount={maxViolationMode}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
