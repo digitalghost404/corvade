@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Eye outline: almond/pointed shape -->
+  <path d="M4 16 C8 8 24 8 28 16 C24 24 8 24 4 16 Z" stroke="#8b5cf6" stroke-width="2" fill="none"/>
+
+  <!-- Iris: solid violet circle -->
+  <circle cx="16" cy="16" r="5" fill="#8b5cf6"/>
+
+  <!-- Pupil: diamond cutout -->
+  <path d="M16 11.5 L20 16 L16 20.5 L12 16 Z" fill="#09090b"/>
+</svg>
