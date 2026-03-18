@@ -5,6 +5,19 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Animated gradient header */
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.header-gradient {
+  background: linear-gradient(135deg, #09090b 0%, #1a0533 25%, #09090b 50%, #12071f 75%, #09090b 100%);
+  background-size: 400% 400%;
+  animation: gradient-shift 20s ease infinite;
+}
+
 /* Skeleton loading animation */
 @keyframes skeleton-pulse {
   0%, 100% { opacity: 0.4; }

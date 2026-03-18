@@ -5,7 +5,13 @@ import { getWS } from '@/lib/wsClient';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4401';
 
-function CorvadeLogo({ noticing }: { noticing: boolean }) {
+function CorvadeLogo({
+  noticing,
+  pupilRef,
+}: {
+  noticing: boolean;
+  pupilRef: React.RefObject<SVGPathElement | null>;
+}) {
   return (
     <svg
       width="24"
@@ -57,8 +63,8 @@ function CorvadeLogo({ noticing }: { noticing: boolean }) {
         }
       />
 
-      {/* Pupil: diamond cutout */}
-      <path d="M40 33 L46 40 L40 47 L34 40 Z" fill="#09090b" />
+      {/* Pupil: diamond cutout — position driven by cursor-tracking via pupilRef */}
+      <path ref={pupilRef} d="M40 33 L46 40 L40 47 L34 40 Z" fill="#09090b" />
     </svg>
   );
 }
@@ -68,6 +74,21 @@ export default function Header() {
   const [cost, setCost] = useState<number | null>(null);
   const [noticing, setNoticing] = useState(false);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pupilRef = useRef<SVGPathElement>(null);
+
+  useEffect(() => {
+    const handleMouse = (e: MouseEvent) => {
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      const dx = ((e.clientX - cx) / cx) * 2.5;
+      const dy = ((e.clientY - cy) / cy) * 1.5;
+      if (pupilRef.current) {
+        pupilRef.current.style.transform = `translate(${dx}px, ${dy}px)`;
+      }
+    };
+    window.addEventListener('mousemove', handleMouse);
+    return () => window.removeEventListener('mousemove', handleMouse);
+  }, []);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/stats`)
@@ -110,9 +131,9 @@ export default function Header() {
   const hasTraces = traceCount !== null && traceCount > 0;
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-12 flex items-center justify-between px-4 bg-zinc-900 border-b border-zinc-800">
+    <header className="fixed top-0 left-0 right-0 z-50 h-12 flex items-center justify-between px-4 header-gradient border-b border-zinc-800">
       <div className="flex items-center gap-2">
-        <CorvadeLogo noticing={noticing} />
+        <CorvadeLogo noticing={noticing} pupilRef={pupilRef} />
         <span className="font-semibold text-sm text-zinc-50">Corvade</span>
       </div>
       <div className="flex items-center gap-2">
