@@ -67,6 +67,53 @@
   animation: trace-scan 0.6s ease-out;
 }
 
+/* Cinematic trace arrival — particle burst + scanline + fade in */
+@keyframes trace-materialize {
+  0% { opacity: 0; transform: translateX(-8px); }
+  30% { opacity: 0.6; transform: translateX(0); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes trace-particle-burst {
+  0% {
+    opacity: 1;
+    background: radial-gradient(circle at 0% 50%, rgba(139, 92, 246, 0.4) 0%, transparent 60%);
+  }
+  100% {
+    opacity: 0;
+    background: radial-gradient(circle at 0% 50%, rgba(139, 92, 246, 0) 0%, transparent 60%);
+  }
+}
+
+/* Combined arrival effect */
+.trace-arrive {
+  animation: trace-materialize 0.5s ease-out;
+  position: relative;
+}
+
+.trace-arrive::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.15) 0%, rgba(139, 92, 246, 0.05) 30%, transparent 70%);
+  animation: trace-scan 0.6s ease-out;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.trace-arrive::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: #8b5cf6;
+  border-radius: 2px;
+  animation: trace-particle-burst 0.4s ease-out;
+  pointer-events: none;
+}
+
 /* Eye breathing animation */
 @keyframes eye-breathe {
   0%, 100% { transform: scale(1); }

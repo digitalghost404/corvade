@@ -77,9 +77,9 @@ export default function Timeline() {
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  // ID of the most recently arrived trace — drives the scanline animation
-  const [scanTraceId, setScanTraceId] = useState<string | null>(null);
-  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ID of the most recently arrived trace — drives the cinematic arrival animation
+  const [arriveTraceId, setArriveTraceId] = useState<string | null>(null);
+  const arriveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
@@ -115,14 +115,14 @@ export default function Timeline() {
     return () => clearTimeout(timer);
   }, [agentFilter, modelFilter, searchFilter, load]);
 
-  // Subscribe to trace:new to trigger reload + scanline on the new row
+  // Subscribe to trace:new to trigger reload + cinematic arrival on the new row
   useEffect(() => {
     const handleTraceNew = (data: { id?: string }) => {
       load();
       if (data?.id) {
-        setScanTraceId(data.id);
-        if (scanTimer.current) clearTimeout(scanTimer.current);
-        scanTimer.current = setTimeout(() => setScanTraceId(null), 700);
+        setArriveTraceId(data.id);
+        if (arriveTimer.current) clearTimeout(arriveTimer.current);
+        arriveTimer.current = setTimeout(() => setArriveTraceId(null), 700);
       }
     };
 
@@ -131,7 +131,7 @@ export default function Timeline() {
 
     return () => {
       wsClient.off('trace:new', handleTraceNew);
-      if (scanTimer.current) clearTimeout(scanTimer.current);
+      if (arriveTimer.current) clearTimeout(arriveTimer.current);
     };
   }, [load]);
 
@@ -264,7 +264,7 @@ export default function Timeline() {
                   const isSelected = selectedTraceId === trace.id;
                   const isKeyboardSelected = selectedIndex === index;
                   const isEven = index % 2 === 0;
-                  const isScanning = scanTraceId === trace.id;
+                  const isArriving = arriveTraceId === trace.id;
                   const errorClass = urgencyClass(trace.status_code);
 
                   let rowClass =
@@ -280,7 +280,7 @@ export default function Timeline() {
                         : 'border-l-transparent hover:bg-zinc-800/50 hover:border-l-violet-500');
                   }
 
-                  if (isScanning) rowClass += ' trace-scan';
+                  if (isArriving) rowClass += ' trace-arrive';
                   if (errorClass) rowClass += ` ${errorClass}`;
 
                   return (
