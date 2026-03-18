@@ -46,10 +46,21 @@ function NodePill({ node, className }: { node: GraphNode; className?: string }) 
   );
 }
 
-function matchScoreColor(score: number): string {
-  if (score >= 0.8) return 'text-emerald-400';
-  if (score >= 0.5) return 'text-yellow-400';
-  return 'text-red-400';
+function MatchBar({ score }: { score: number }) {
+  const pct = Math.round(score * 100);
+  const barColor = score >= 0.8 ? 'bg-green-500' : 'bg-yellow-500';
+  const textColor = score >= 0.8 ? 'text-emerald-400' : 'text-yellow-400';
+  return (
+    <div className="flex flex-col items-center gap-1 min-w-[48px]">
+      <span className={`text-xs font-mono font-semibold ${textColor}`}>{pct}%</span>
+      <div className="w-10 h-1.5 bg-zinc-700 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function SessionDiff({ sessionA, sessionB }: Props) {
@@ -98,31 +109,26 @@ export default function SessionDiff({ sessionA, sessionB }: Props) {
 
   if (!result) return null;
 
-  const totalNodes =
-    result.aligned_nodes.length + result.left_only.length + result.right_only.length;
+  const matchedCount = result.aligned_nodes.length;
+  const divergedCount = result.divergence_points.length;
+  const leftOnlyCount = result.left_only.length;
+  const rightOnlyCount = result.right_only.length;
+  const totalNodes = matchedCount + leftOnlyCount + rightOnlyCount;
 
   return (
     <div className="space-y-6">
       {/* Summary bar */}
-      <div className="flex flex-wrap gap-4 text-sm text-zinc-400 border border-zinc-800 rounded-lg px-4 py-3 bg-zinc-950">
-        <span>
-          <span className="text-zinc-200 font-semibold">{totalNodes}</span> total nodes
-        </span>
-        <span>
-          <span className="text-emerald-400 font-semibold">{result.aligned_nodes.length}</span> matched
-        </span>
-        <span>
-          <span className="text-red-400 font-semibold">{result.left_only.length}</span> left-only
-        </span>
-        <span>
-          <span className="text-green-400 font-semibold">{result.right_only.length}</span> right-only
-        </span>
-        <span>
-          <span className="text-yellow-400 font-semibold">{result.divergence_points.length}</span> divergence points
-        </span>
-      </div>
+      <p className="text-zinc-400 text-sm">
+        <span className="text-emerald-400 font-semibold">{matchedCount} matched</span>
+        {' · '}
+        <span className="text-yellow-400 font-semibold">{divergedCount} diverged</span>
+        {' · '}
+        <span className="text-red-400 font-semibold">{leftOnlyCount} left-only</span>
+        {' · '}
+        <span className="text-green-400 font-semibold">{rightOnlyCount} right-only</span>
+      </p>
 
-      {/* Aligned pairs */}
+      {/* Aligned / matched pairs */}
       {result.aligned_nodes.length > 0 && (
         <section>
           <h3 className="text-zinc-300 font-semibold text-sm mb-3">Matched Pairs</h3>
@@ -133,9 +139,7 @@ export default function SessionDiff({ sessionA, sessionB }: Props) {
                 className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3"
               >
                 <NodePill node={pair.left} className="border-zinc-700 bg-zinc-950" />
-                <div className={`text-xs font-mono font-semibold whitespace-nowrap ${matchScoreColor(pair.match_score)}`}>
-                  {(pair.match_score * 100).toFixed(0)}%
-                </div>
+                <MatchBar score={pair.match_score} />
                 <NodePill node={pair.right} className="border-zinc-700 bg-zinc-950" />
               </div>
             ))}
@@ -149,11 +153,16 @@ export default function SessionDiff({ sessionA, sessionB }: Props) {
           <h3 className="text-yellow-400 font-semibold text-sm mb-3">Divergence Points</h3>
           <div className="space-y-2">
             {result.divergence_points.map((node) => (
-              <NodePill
+              <div
                 key={node.id}
-                node={node}
-                className="border-yellow-700/60 bg-yellow-950/20"
-              />
+                className="flex items-start gap-2 rounded-md border border-yellow-700/60 bg-yellow-950/20 px-3 py-2"
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full bg-violet-500 pulse-dot mt-1.5 shrink-0"
+                  aria-hidden="true"
+                />
+                <NodePill node={node} className="border-0 bg-transparent p-0 flex-1" />
+              </div>
             ))}
           </div>
         </section>
