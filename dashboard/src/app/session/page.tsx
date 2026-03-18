@@ -103,7 +103,7 @@ function SessionContent() {
       </div>
 
       {/* Two-panel layout */}
-      <div className="flex gap-4">
+      <div className="flex flex-col lg:flex-row gap-4">
         {/* Left panel: topology graph */}
         <div className="min-w-0" style={{ flex: 3 }}>
           <div

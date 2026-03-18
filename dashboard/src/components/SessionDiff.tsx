@@ -136,11 +136,15 @@ export default function SessionDiff({ sessionA, sessionB }: Props) {
             {result.aligned_nodes.map((pair, i) => (
               <div
                 key={i}
-                className="grid grid-cols-[1fr_auto_1fr] gap-3 items-center bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3"
+                className="flex flex-col md:flex-row gap-3 items-center bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3"
               >
-                <NodePill node={pair.left} className="border-zinc-700 bg-zinc-950" />
+                <div className="w-full md:flex-1">
+                  <NodePill node={pair.left} className="border-zinc-700 bg-zinc-950" />
+                </div>
                 <MatchBar score={pair.match_score} />
-                <NodePill node={pair.right} className="border-zinc-700 bg-zinc-950" />
+                <div className="w-full md:flex-1">
+                  <NodePill node={pair.right} className="border-zinc-700 bg-zinc-950" />
+                </div>
               </div>
             ))}
           </div>

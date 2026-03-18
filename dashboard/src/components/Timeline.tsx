@@ -220,9 +220,9 @@ export default function Timeline() {
                 <th className="px-4 py-3 font-medium">Time</th>
                 <th className="px-4 py-3 font-medium">Model</th>
                 <th className="px-4 py-3 font-medium">Agent</th>
-                <th className="px-4 py-3 font-medium text-right">Tokens</th>
+                <th className="px-4 py-3 font-medium text-right hidden sm:table-cell">Tokens</th>
                 <th className="px-4 py-3 font-medium text-right">Cost</th>
-                <th className="px-4 py-3 font-medium text-right">Latency</th>
+                <th className="px-4 py-3 font-medium text-right hidden sm:table-cell">Latency</th>
                 <th className="px-4 py-3 font-medium text-center">Status</th>
               </tr>
             </thead>
@@ -268,13 +268,13 @@ export default function Timeline() {
                       <td className="px-4 py-2 text-zinc-300">
                         {trace.agent ?? <span className="text-zinc-500">—</span>}
                       </td>
-                      <td className="px-4 py-2 text-right font-mono text-zinc-300">
+                      <td className="px-4 py-2 text-right font-mono text-zinc-300 hidden sm:table-cell">
                         {formatTokens(trace.tokens_prompt, trace.tokens_completion)}
                       </td>
                       <td className="px-4 py-2 text-right font-mono text-zinc-300">
                         {formatCost(trace.cost)}
                       </td>
-                      <td className="px-4 py-2 text-right font-mono text-zinc-300">
+                      <td className="px-4 py-2 text-right font-mono text-zinc-300 hidden sm:table-cell">
                         {formatLatency(trace.latency_ms)}
                       </td>
                       <td className="px-4 py-2 text-center">
