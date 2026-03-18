@@ -22,10 +22,10 @@ export default function CursorGlow() {
       aria-hidden="true"
       style={{
         position: 'fixed',
-        width: 400,
-        height: 400,
+        width: 500,
+        height: 500,
         borderRadius: '50%',
-        background: 'radial-gradient(circle, rgba(139, 92, 246, 0.04) 0%, transparent 70%)',
+        background: 'radial-gradient(circle, rgba(139, 92, 246, 0.02) 0%, transparent 60%)',
         pointerEvents: 'none',
         zIndex: 1,
         transform: 'translate(-50%, -50%)',
