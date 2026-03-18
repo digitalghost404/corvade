@@ -6,13 +6,14 @@ import DetailInspector from '@/components/DetailInspector';
 
 interface Trace {
   id: string;
-  timestamp: string;
+  created_at: string;
   model: string;
-  agent: string;
-  tokens: number;
-  cost: number;
-  latency: number;
-  status: number;
+  agent: string | null;
+  tokens_prompt: number | null;
+  tokens_completion: number | null;
+  cost: number | null;
+  latency_ms: number | null;
+  status_code: number;
 }
 
 function statusColor(status: number): string {
@@ -23,13 +24,32 @@ function statusColor(status: number): string {
 }
 
 function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch {
+    return '—';
+  }
 }
 
-function formatCost(cost: number): string {
-  if (cost < 0.01) return `$${(cost * 1000).toFixed(3)}m`;
+function formatCost(cost: number | null): string {
+  if (cost === null || cost === undefined) return '—';
+  if (cost === 0) return '$0.00';
+  if (cost < 0.001) return `$${(cost * 10000).toFixed(1)}×10⁻⁴`;
   return `$${cost.toFixed(4)}`;
+}
+
+function formatTokens(prompt: number | null, completion: number | null): string {
+  const total = (prompt || 0) + (completion || 0);
+  if (total === 0 && prompt === null && completion === null) return '—';
+  return total.toLocaleString();
+}
+
+function formatLatency(ms: number | null): string {
+  if (ms === null || ms === undefined) return '—';
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 export default function Timeline() {
@@ -45,6 +65,7 @@ export default function Timeline() {
       const params: Record<string, string> = {};
       if (agentFilter) params.agent = agentFilter;
       if (modelFilter) params.model = modelFilter;
+      if (searchFilter) params.search = searchFilter;
       const data = await fetchTraces(Object.keys(params).length ? params : undefined);
       setTraces(Array.isArray(data) ? data : []);
     } catch {
@@ -52,22 +73,12 @@ export default function Timeline() {
     } finally {
       setLoading(false);
     }
-  }, [agentFilter, modelFilter]);
+  }, [agentFilter, modelFilter, searchFilter]);
 
   useEffect(() => {
     setLoading(true);
     load();
   }, [load]);
-
-  const filtered = traces.filter((t) => {
-    if (!searchFilter) return true;
-    const q = searchFilter.toLowerCase();
-    return (
-      t.model?.toLowerCase().includes(q) ||
-      t.agent?.toLowerCase().includes(q) ||
-      t.id?.toLowerCase().includes(q)
-    );
-  });
 
   const inputClass =
     'bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-500 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-zinc-500';
@@ -100,7 +111,7 @@ export default function Timeline() {
       </div>
 
       {/* Table */}
-      <div className="rounded-lg border border-zinc-800 overflow-hidden" role="grid" aria-label="Traces">
+      <div className="rounded-lg border border-zinc-800 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-zinc-900 text-zinc-400 text-left">
@@ -120,14 +131,14 @@ export default function Timeline() {
                   Loading...
                 </td>
               </tr>
-            ) : filtered.length === 0 ? (
+            ) : traces.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
-                  No traces captured yet...
+                  No traces captured yet. Point your agents at the proxy to get started.
                 </td>
               </tr>
             ) : (
-              filtered.map((trace) => (
+              traces.map((trace) => (
                 <tr
                   key={trace.id}
                   onClick={() =>
@@ -140,22 +151,22 @@ export default function Timeline() {
                   }`}
                 >
                   <td className="px-4 py-3 font-mono text-zinc-400 text-xs">
-                    {formatTime(trace.timestamp)}
+                    {formatTime(trace.created_at)}
                   </td>
                   <td className="px-4 py-3 text-zinc-200">{trace.model}</td>
-                  <td className="px-4 py-3 text-zinc-300">{trace.agent}</td>
+                  <td className="px-4 py-3 text-zinc-300">{trace.agent || '—'}</td>
                   <td className="px-4 py-3 text-right font-mono text-zinc-300">
-                    {trace.tokens?.toLocaleString()}
+                    {formatTokens(trace.tokens_prompt, trace.tokens_completion)}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-zinc-300">
                     {formatCost(trace.cost)}
                   </td>
                   <td className="px-4 py-3 text-right font-mono text-zinc-300">
-                    {trace.latency?.toFixed(2)}s
+                    {formatLatency(trace.latency_ms)}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <span className={`font-mono font-medium ${statusColor(trace.status)}`}>
-                      {trace.status}
+                    <span className={`font-mono font-medium ${statusColor(trace.status_code)}`}>
+                      {trace.status_code}
                     </span>
                   </td>
                 </tr>
@@ -164,6 +175,7 @@ export default function Timeline() {
           </tbody>
         </table>
       </div>
+
       {/* Detail Inspector */}
       {selectedTraceId && (
         <DetailInspector

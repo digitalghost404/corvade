@@ -5,19 +5,19 @@ import { fetchTrace } from '@/lib/api';
 
 interface TraceDetail {
   id: string;
-  timestamp: string;
+  created_at: string;
   model: string;
-  provider?: string;
-  agent?: string;
-  status: number;
-  latency?: number;
-  ttft?: number;
-  cost?: number;
-  tokens_in?: number;
-  tokens_out?: number;
-  tokens_cached?: number;
-  request?: unknown;
-  response?: unknown;
+  provider: string;
+  agent: string | null;
+  status_code: number;
+  latency_ms: number | null;
+  ttft_ms: number | null;
+  cost: number | null;
+  tokens_prompt: number | null;
+  tokens_completion: number | null;
+  tokens_cached: number | null;
+  request: string;
+  response: string | null;
 }
 
 interface Props {
@@ -39,34 +39,44 @@ function MetricPill({ label, value }: { label: string; value: string | number | 
     <div className="flex flex-col gap-0.5">
       <span className="text-xs text-zinc-500 uppercase tracking-wide">{label}</span>
       <span className="text-sm font-mono text-zinc-200">
-        {value ?? <span className="text-zinc-600">—</span>}
+        {value !== undefined && value !== null ? value : <span className="text-zinc-600">—</span>}
       </span>
     </div>
   );
 }
 
-function JsonViewer({ data }: { data: unknown }) {
+function formatCost(cost: number | null): string | undefined {
+  if (cost === null || cost === undefined) return undefined;
+  if (cost === 0) return '$0.00';
+  return `$${cost.toFixed(6)}`;
+}
+
+function formatLatency(ms: number | null): string | undefined {
+  if (ms === null || ms === undefined) return undefined;
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
+}
+
+function JsonViewer({ data }: { data: string | null }) {
   if (data === undefined || data === null) {
     return (
       <div className="px-4 py-8 text-center text-zinc-600 text-sm">No data available.</div>
     );
   }
 
+  // The API returns request/response as JSON strings — parse them for pretty-printing
   let formatted: string;
   try {
-    formatted = JSON.stringify(data, null, 2);
+    const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+    formatted = JSON.stringify(parsed, null, 2);
   } catch {
     formatted = String(data);
   }
 
-  // Simple syntax highlighting using CSS classes applied to tokens
-  // We parse the JSON string into spans for color, using a replace approach
-  // This avoids any external dependency.
   const highlighted = formatted
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    // strings (keys and values)
     .replace(
       /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?)/g,
       (match) => {
@@ -76,15 +86,12 @@ function JsonViewer({ data }: { data: unknown }) {
         return `<span class="text-amber-300">${match}</span>`;
       },
     )
-    // numbers
     .replace(/\b(-?\d+\.?\d*([eE][+-]?\d+)?)\b/g, '<span class="text-violet-400">$1</span>')
-    // booleans and null
     .replace(/\b(true|false|null)\b/g, '<span class="text-emerald-400">$1</span>');
 
   return (
     <pre
       className="text-xs font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap break-all p-4 overflow-auto max-h-[420px]"
-      // eslint-disable-next-line react/no-danger
       dangerouslySetInnerHTML={{ __html: highlighted }}
     />
   );
@@ -119,7 +126,6 @@ export default function DetailInspector({ traceId, onClose }: Props) {
     };
   }, [traceId]);
 
-  // Close on Escape key
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === 'Escape') onClose();
@@ -150,10 +156,7 @@ export default function DetailInspector({ traceId, onClose }: Props) {
               {trace.provider}
             </span>
           )}
-          <span
-            className="text-xs font-mono text-zinc-600 shrink-0"
-            title={traceId}
-          >
+          <span className="text-xs font-mono text-zinc-600 shrink-0" title={traceId}>
             #{truncatedId}
           </span>
         </div>
@@ -166,7 +169,6 @@ export default function DetailInspector({ traceId, onClose }: Props) {
         </button>
       </div>
 
-      {/* Loading / Error states */}
       {loading && (
         <div className="px-4 py-10 text-center text-zinc-500 text-sm">Loading trace...</div>
       )}
@@ -179,49 +181,28 @@ export default function DetailInspector({ traceId, onClose }: Props) {
         <>
           {/* Metrics bar */}
           <div className="flex flex-wrap gap-x-6 gap-y-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900/40">
-            <MetricPill label="Tokens in" value={trace.tokens_in?.toLocaleString()} />
-            <MetricPill label="Tokens out" value={trace.tokens_out?.toLocaleString()} />
-            <MetricPill label="Cached" value={trace.tokens_cached?.toLocaleString()} />
-            <MetricPill
-              label="Cost"
-              value={
-                trace.cost !== undefined
-                  ? trace.cost < 0.01
-                    ? `$${(trace.cost * 1000).toFixed(3)}m`
-                    : `$${trace.cost.toFixed(4)}`
-                  : undefined
-              }
-            />
-            <MetricPill
-              label="Latency"
-              value={trace.latency !== undefined ? `${trace.latency.toFixed(2)}s` : undefined}
-            />
-            <MetricPill
-              label="TTFT"
-              value={trace.ttft !== undefined ? `${(trace.ttft * 1000).toFixed(0)}ms` : undefined}
-            />
+            <MetricPill label="Tokens in" value={trace.tokens_prompt ?? undefined} />
+            <MetricPill label="Tokens out" value={trace.tokens_completion ?? undefined} />
+            <MetricPill label="Cached" value={trace.tokens_cached ?? undefined} />
+            <MetricPill label="Cost" value={formatCost(trace.cost)} />
+            <MetricPill label="Latency" value={formatLatency(trace.latency_ms)} />
+            <MetricPill label="TTFT" value={trace.ttft_ms != null ? `${trace.ttft_ms}ms` : undefined} />
             <div className="flex flex-col gap-0.5">
               <span className="text-xs text-zinc-500 uppercase tracking-wide">Status</span>
               <span
-                className={`text-sm font-mono font-semibold px-2 py-0.5 rounded w-fit ${statusColor(trace.status)}`}
+                className={`text-sm font-mono font-semibold px-2 py-0.5 rounded w-fit ${statusColor(trace.status_code)}`}
               >
-                {trace.status}
+                {trace.status_code}
               </span>
             </div>
           </div>
 
           {/* Tabs */}
           <div className="flex border-b border-zinc-800 bg-zinc-900/20">
-            <button
-              className={tabClass(tab === 'request')}
-              onClick={() => setTab('request')}
-            >
+            <button className={tabClass(tab === 'request')} onClick={() => setTab('request')}>
               Request
             </button>
-            <button
-              className={tabClass(tab === 'response')}
-              onClick={() => setTab('response')}
-            >
+            <button className={tabClass(tab === 'response')} onClick={() => setTab('response')}>
               Response
             </button>
           </div>
