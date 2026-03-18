@@ -246,6 +246,28 @@ body {
   color: #fafafa;
 }
 
+/* Token usage micro-bar — applied to <td> containing the bar */
+.token-bar {
+  position: relative;
+}
+
+.token-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: var(--bar-width, 0%);
+  height: 2px;
+  background: linear-gradient(90deg, #8b5cf6, rgba(139, 92, 246, 0.3));
+  border-radius: 1px;
+  transition: opacity 0.15s;
+  opacity: 0.4;
+}
+
+tr:hover .token-bar::after {
+  opacity: 0.8;
+}
+
 /* ── Boot sequence ─────────────────────────────────────────────────────────── */
 
 @keyframes slide-down {

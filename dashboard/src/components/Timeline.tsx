@@ -5,6 +5,7 @@ import { fetchTraces } from '@/lib/api';
 import DetailInspector from '@/components/DetailInspector';
 import SkeletonRows from '@/components/SkeletonRows';
 import EmptyState from '@/components/EmptyState';
+import AgentAvatar from '@/components/AgentAvatar';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { getWS } from '@/lib/wsClient';
 
@@ -18,6 +19,35 @@ interface Trace {
   cost: number | null;
   latency_ms: number | null;
   status_code: number;
+  response: string | null;
+  request: string;
+}
+
+// Extract all tool_call IDs from a response JSON string.
+function extractToolCallIds(response: string | null): string[] {
+  if (!response) return [];
+  try {
+    const parsed = JSON.parse(response);
+    const calls = parsed?.choices?.[0]?.message?.tool_calls;
+    if (Array.isArray(calls)) {
+      return calls.map((c: { id?: string }) => c.id).filter(Boolean) as string[];
+    }
+  } catch {
+    // not parseable — fall through
+  }
+  return [];
+}
+
+// Check whether a request JSON string references any of the given tool_call IDs.
+function requestReferencesToolCallIds(request: string, ids: string[]): boolean {
+  if (!ids.length || !request) return false;
+  try {
+    const parsed = JSON.parse(request);
+    const messages: Array<{ role?: string; tool_call_id?: string }> = parsed?.messages ?? [];
+    return messages.some((m) => m.tool_call_id && ids.includes(m.tool_call_id));
+  } catch {
+    return false;
+  }
 }
 
 function statusColor(status: number): string {
@@ -79,6 +109,8 @@ export default function Timeline() {
   const [selectedIndex, setSelectedIndex] = useState(-1);
   // ID of the most recently arrived trace — drives the cinematic arrival animation
   const [arriveTraceId, setArriveTraceId] = useState<string | null>(null);
+  // Topology hover: tool_call IDs extracted from the hovered trace's response
+  const [hoveredToolCallIds, setHoveredToolCallIds] = useState<string[]>([]);
   const arriveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
@@ -260,66 +292,92 @@ export default function Timeline() {
               {loading ? (
                 <SkeletonRows rows={5} />
               ) : (
-                traces.map((trace, index) => {
-                  const isSelected = selectedTraceId === trace.id;
-                  const isKeyboardSelected = selectedIndex === index;
-                  const isEven = index % 2 === 0;
-                  const isArriving = arriveTraceId === trace.id;
-                  const errorClass = urgencyClass(trace.status_code);
-
-                  let rowClass =
-                    'border-t border-zinc-800 cursor-pointer transition-all duration-100 border-l-2 ';
-
-                  if (isSelected) {
-                    rowClass += 'bg-zinc-800/70 border-l-violet-500';
-                  } else {
-                    rowClass +=
-                      (isEven ? 'bg-zinc-950 ' : 'bg-zinc-900/30 ') +
-                      (isKeyboardSelected
-                        ? 'border-l-violet-500 bg-zinc-800/50'
-                        : 'border-l-transparent hover:bg-zinc-800/50 hover:border-l-violet-500');
-                  }
-
-                  if (isArriving) rowClass += ' trace-arrive';
-                  if (errorClass) rowClass += ` ${errorClass}`;
-
-                  return (
-                    <tr
-                      key={trace.id}
-                      ref={(el) => { rowRefs.current[index] = el; }}
-                      onClick={() => {
-                        setSelectedIndex(index);
-                        setSelectedTraceId((prev) => (prev === trace.id ? null : trace.id));
-                      }}
-                      className={rowClass}
-                    >
-                      <td
-                        className="px-4 py-2 font-mono text-zinc-400 text-xs"
-                        title={trace.created_at}
-                      >
-                        {timeAgo(trace.created_at)}
-                      </td>
-                      <td className="px-4 py-2 text-zinc-200">{trace.model}</td>
-                      <td className="px-4 py-2 text-zinc-300">
-                        {trace.agent ?? <span className="text-zinc-500">—</span>}
-                      </td>
-                      <td className="px-4 py-2 text-right font-mono text-zinc-300 hidden sm:table-cell">
-                        {formatTokens(trace.tokens_prompt, trace.tokens_completion)}
-                      </td>
-                      <td className="px-4 py-2 text-right font-mono text-zinc-300">
-                        {formatCost(trace.cost)}
-                      </td>
-                      <td className="px-4 py-2 text-right font-mono text-zinc-300 hidden sm:table-cell">
-                        {formatLatency(trace.latency_ms)}
-                      </td>
-                      <td className="px-4 py-2 text-center">
-                        <span className={`font-mono font-medium ${statusColor(trace.status_code)}`}>
-                          {trace.status_code}
-                        </span>
-                      </td>
-                    </tr>
+                (() => {
+                  const maxTokens = Math.max(
+                    ...traces.map((t) => (t.tokens_prompt || 0) + (t.tokens_completion || 0)),
+                    1,
                   );
-                })
+
+                  return traces.map((trace, index) => {
+                    const isSelected = selectedTraceId === trace.id;
+                    const isKeyboardSelected = selectedIndex === index;
+                    const isEven = index % 2 === 0;
+                    const isArriving = arriveTraceId === trace.id;
+                    const errorClass = urgencyClass(trace.status_code);
+                    const traceTokens = (trace.tokens_prompt || 0) + (trace.tokens_completion || 0);
+                    const barWidth = `${((traceTokens / maxTokens) * 100).toFixed(1)}%`;
+
+                    // Topology: this row is "linked" if the hovered trace made a tool call
+                    // that this trace's request references.
+                    const isLinked =
+                      hoveredToolCallIds.length > 0 &&
+                      requestReferencesToolCallIds(trace.request, hoveredToolCallIds);
+
+                    let rowClass =
+                      'border-t border-zinc-800 cursor-pointer transition-all duration-100 border-l-2 ';
+
+                    if (isSelected) {
+                      rowClass += 'bg-zinc-800/70 border-l-violet-500';
+                    } else {
+                      rowClass +=
+                        (isEven ? 'bg-zinc-950 ' : 'bg-zinc-900/30 ') +
+                        (isKeyboardSelected
+                          ? 'border-l-violet-500 bg-zinc-800/50'
+                          : 'border-l-transparent hover:bg-zinc-800/50 hover:border-l-violet-500');
+                    }
+
+                    if (isArriving) rowClass += ' trace-arrive';
+                    if (errorClass) rowClass += ` ${errorClass}`;
+                    if (isLinked) rowClass += ' ring-1 ring-violet-500/30';
+
+                    return (
+                      <tr
+                        key={trace.id}
+                        ref={(el) => { rowRefs.current[index] = el; }}
+                        onClick={() => {
+                          setSelectedIndex(index);
+                          setSelectedTraceId((prev) => (prev === trace.id ? null : trace.id));
+                        }}
+                        onMouseEnter={() => setHoveredToolCallIds(extractToolCallIds(trace.response))}
+                        onMouseLeave={() => setHoveredToolCallIds([])}
+                        className={rowClass}
+                      >
+                        <td
+                          className="px-4 py-2 font-mono text-zinc-400 text-xs token-bar"
+                          title={trace.created_at}
+                          style={{ '--bar-width': barWidth } as React.CSSProperties}
+                        >
+                          {timeAgo(trace.created_at)}
+                        </td>
+                        <td className="px-4 py-2 text-zinc-200">{trace.model}</td>
+                        <td className="px-4 py-2 text-zinc-300">
+                          {trace.agent ? (
+                            <span className="flex items-center gap-1.5">
+                              <AgentAvatar name={trace.agent} size={16} />
+                              {trace.agent}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-500">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-zinc-300 hidden sm:table-cell">
+                          {formatTokens(trace.tokens_prompt, trace.tokens_completion)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-zinc-300">
+                          {formatCost(trace.cost)}
+                        </td>
+                        <td className="px-4 py-2 text-right font-mono text-zinc-300 hidden sm:table-cell">
+                          {formatLatency(trace.latency_ms)}
+                        </td>
+                        <td className="px-4 py-2 text-center">
+                          <span className={`font-mono font-medium ${statusColor(trace.status_code)}`}>
+                            {trace.status_code}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()
               )}
             </tbody>
           </table>

@@ -1,5 +1,7 @@
 'use client';
 
+import AgentAvatar from '@/components/AgentAvatar';
+
 interface Session {
   id: string;
   agent: string | null;
@@ -40,13 +42,14 @@ export default function SessionCard({ session }: Props) {
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <span
-          className={
+          className={`flex items-center gap-2 min-w-0 ${
             session.agent
-              ? 'text-lg font-semibold text-zinc-50 truncate'
-              : 'text-lg font-semibold text-zinc-500 italic truncate'
-          }
+              ? 'text-lg font-semibold text-zinc-50'
+              : 'text-lg font-semibold text-zinc-500 italic'
+          }`}
         >
-          {session.agent ?? 'Unknown Agent'}
+          {session.agent && <AgentAvatar name={session.agent} size={20} />}
+          <span className="truncate">{session.agent ?? 'Unknown Agent'}</span>
         </span>
         <span
           className={`shrink-0 text-xs px-2 py-0.5 rounded-full ${STATUS_STYLES[session.status] ?? STATUS_STYLES.error}`}
