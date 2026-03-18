@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import Header from './Header';
 import TabNav from './TabNav';
 import KeyboardHelp from './KeyboardHelp';
+import CommandPalette from './CommandPalette';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import TopologyCanvas from './TopologyCanvas';
 
@@ -20,6 +21,7 @@ const BOOT_KEY = 'corvade-booted';
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const [helpOpen, setHelpOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // If sessionStorage already has the flag, skip straight to stage 4 (fully visible).
   const [stage, setStage] = useState<BootStage>(() => {
@@ -68,6 +70,19 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
   );
 
   useKeyboard(bindings());
+
+  // Cmd+K / Ctrl+K — needs a separate listener because useKeyboard explicitly
+  // ignores modifier key combos (it bails on ctrlKey/metaKey).
+  useEffect(() => {
+    function handlePaletteShortcut(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setPaletteOpen((prev) => !prev);
+      }
+    }
+    document.addEventListener('keydown', handlePaletteShortcut);
+    return () => document.removeEventListener('keydown', handlePaletteShortcut);
+  }, []);
 
   // Derive per-element class names from the current stage.
   // Stage 4 means the animation is done; apply no animation classes so
@@ -125,6 +140,15 @@ export default function LayoutShell({ children }: { children: React.ReactNode })
       </div>
 
       <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
+
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onOpenHelp={() => {
+          setPaletteOpen(false);
+          setHelpOpen(true);
+        }}
+      />
     </div>
   );
 }
