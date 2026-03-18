@@ -73,26 +73,34 @@ function JsonViewer({ data }: { data: string | null }) {
     formatted = String(data);
   }
 
-  const highlighted = formatted
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(
-      /("(\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?)/g,
-      (match) => {
-        if (/:$/.test(match.trimEnd())) {
-          return `<span class="text-sky-400">${match}</span>`;
-        }
-        return `<span class="text-amber-300">${match}</span>`;
-      },
-    )
-    .replace(/\b(-?\d+\.?\d*([eE][+-]?\d+)?)\b/g, '<span class="text-violet-400">$1</span>')
-    .replace(/\b(true|false|null)\b/g, '<span class="text-emerald-400">$1</span>');
+  // Tokenize and colorize JSON safely (no regex on HTML)
+  const lines = formatted.split('\n');
+  const colorized = lines.map(line => {
+    // Escape HTML first
+    let safe = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // Color key-value pairs: "key": value
+    safe = safe.replace(/^(\s*)("(?:[^"\\]|\\.)*")(\s*:\s*)("(?:[^"\\]|\\.)*")(,?)$/,
+      '$1<span class="text-sky-400">$2</span>$3<span class="text-amber-300">$4</span>$5');
+    safe = safe.replace(/^(\s*)("(?:[^"\\]|\\.)*")(\s*:\s*)(-?\d+\.?\d*)(,?)$/,
+      '$1<span class="text-sky-400">$2</span>$3<span class="text-violet-400">$4</span>$5');
+    safe = safe.replace(/^(\s*)("(?:[^"\\]|\\.)*")(\s*:\s*)(true|false|null)(,?)$/,
+      '$1<span class="text-sky-400">$2</span>$3<span class="text-emerald-400">$4</span>$5');
+    // Standalone strings in arrays
+    safe = safe.replace(/^(\s*)("(?:[^"\\]|\\.)*")(,?)$/,
+      '$1<span class="text-amber-300">$2</span>$3');
+    // Standalone numbers
+    safe = safe.replace(/^(\s*)(-?\d+\.?\d*)(,?)$/,
+      '$1<span class="text-violet-400">$2</span>$3');
+    // Standalone booleans/null
+    safe = safe.replace(/^(\s*)(true|false|null)(,?)$/,
+      '$1<span class="text-emerald-400">$2</span>$3');
+    return safe;
+  }).join('\n');
 
   return (
     <pre
       className="text-xs font-mono leading-relaxed text-zinc-300 whitespace-pre-wrap break-all p-4 overflow-auto max-h-[420px]"
-      dangerouslySetInnerHTML={{ __html: highlighted }}
+      dangerouslySetInnerHTML={{ __html: colorized }}
     />
   );
 }

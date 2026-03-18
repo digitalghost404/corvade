@@ -36,8 +36,7 @@ function formatTime(iso: string): string {
 function formatCost(cost: number | null): string {
   if (cost === null || cost === undefined) return '—';
   if (cost === 0) return '$0.00';
-  if (cost < 0.001) return `$${(cost * 10000).toFixed(1)}×10⁻⁴`;
-  return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(6)}`;
 }
 
 function formatTokens(prompt: number | null, completion: number | null): string {
