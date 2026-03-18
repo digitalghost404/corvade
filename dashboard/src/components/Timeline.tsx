@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { fetchTraces } from '@/lib/api';
 import DetailInspector from '@/components/DetailInspector';
+import SkeletonRows from '@/components/SkeletonRows';
+import EmptyState from '@/components/EmptyState';
+import { useKeyboard } from '@/hooks/useKeyboard';
 
 interface Trace {
   id: string;
@@ -23,11 +26,19 @@ function statusColor(status: number): string {
   return 'text-zinc-400';
 }
 
-function formatTime(iso: string): string {
+function timeAgo(iso: string): string {
   try {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '—';
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const diffMs = Date.now() - d.getTime();
+    const diffS = Math.floor(diffMs / 1000);
+    if (diffS < 60) return `${diffS}s ago`;
+    const diffM = Math.floor(diffS / 60);
+    if (diffM < 60) return `${diffM}m ago`;
+    const diffH = Math.floor(diffM / 60);
+    if (diffH < 24) return `${diffH}h ago`;
+    const diffD = Math.floor(diffH / 24);
+    return `${diffD}d ago`;
   } catch {
     return '—';
   }
@@ -58,13 +69,25 @@ export default function Timeline() {
   const [modelFilter, setModelFilter] = useState('');
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
+
+  const searchRef = useRef<HTMLInputElement>(null);
+  const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
+
+  // Debounced fetch: filters are applied 300ms after the last change
+  const agentFilterRef = useRef(agentFilter);
+  const modelFilterRef = useRef(modelFilter);
+  const searchFilterRef = useRef(searchFilter);
+  agentFilterRef.current = agentFilter;
+  modelFilterRef.current = modelFilter;
+  searchFilterRef.current = searchFilter;
 
   const load = useCallback(async () => {
     try {
       const params: Record<string, string> = {};
-      if (agentFilter) params.agent = agentFilter;
-      if (modelFilter) params.model = modelFilter;
-      if (searchFilter) params.search = searchFilter;
+      if (agentFilterRef.current) params.agent = agentFilterRef.current;
+      if (modelFilterRef.current) params.model = modelFilterRef.current;
+      if (searchFilterRef.current) params.search = searchFilterRef.current;
       const data = await fetchTraces(Object.keys(params).length ? params : undefined);
       setTraces(Array.isArray(data) ? data : []);
     } catch {
@@ -72,20 +95,82 @@ export default function Timeline() {
     } finally {
       setLoading(false);
     }
-  }, [agentFilter, modelFilter, searchFilter]);
+  }, []);
 
   useEffect(() => {
     setLoading(true);
-    load();
-  }, [load]);
+    const timer = setTimeout(() => {
+      load();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [agentFilter, modelFilter, searchFilter, load]);
+
+  // Scroll selected row into view
+  useEffect(() => {
+    if (selectedIndex >= 0 && rowRefs.current[selectedIndex]) {
+      rowRefs.current[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+    }
+  }, [selectedIndex]);
+
+  const hasFilters = agentFilter || modelFilter || searchFilter;
+
+  function clearFilters() {
+    setAgentFilter('');
+    setModelFilter('');
+    setSearchFilter('');
+  }
+
+  const openInspector = useCallback(() => {
+    if (selectedIndex >= 0 && selectedIndex < traces.length) {
+      const trace = traces[selectedIndex];
+      setSelectedTraceId((prev) => (prev === trace.id ? null : trace.id));
+    }
+  }, [selectedIndex, traces]);
+
+  useKeyboard({
+    j: (e) => {
+      e.stopPropagation();
+      setSelectedIndex((i) => Math.min(i + 1, traces.length - 1));
+    },
+    ArrowDown: (e) => {
+      e.stopPropagation();
+      setSelectedIndex((i) => Math.min(i + 1, traces.length - 1));
+    },
+    k: (e) => {
+      e.stopPropagation();
+      setSelectedIndex((i) => Math.max(i - 1, 0));
+    },
+    ArrowUp: (e) => {
+      e.stopPropagation();
+      setSelectedIndex((i) => Math.max(i - 1, 0));
+    },
+    Enter: (e) => {
+      e.stopPropagation();
+      openInspector();
+    },
+    ' ': (e) => {
+      e.stopPropagation();
+      openInspector();
+    },
+    Escape: (e) => {
+      e.stopPropagation();
+      setSelectedTraceId(null);
+      setSelectedIndex(-1);
+    },
+    '/': (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      searchRef.current?.focus();
+    },
+  });
 
   const inputClass =
-    'bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-500 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-zinc-500';
+    'bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder-zinc-500 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent';
 
   return (
     <div>
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-4">
+      <div className="flex flex-wrap gap-3 mb-4 items-center">
         <input
           type="text"
           placeholder="Filter by agent..."
@@ -101,85 +186,119 @@ export default function Timeline() {
           className={inputClass}
         />
         <input
+          ref={searchRef}
           type="text"
           placeholder="Search..."
           value={searchFilter}
           onChange={(e) => setSearchFilter(e.target.value)}
           className={inputClass}
         />
+        {hasFilters && (
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="text-zinc-500 hover:text-zinc-300 text-sm cursor-pointer"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border border-zinc-800 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-zinc-900 text-zinc-400 text-left">
-              <th className="px-4 py-3 font-medium">Time</th>
-              <th className="px-4 py-3 font-medium">Model</th>
-              <th className="px-4 py-3 font-medium">Agent</th>
-              <th className="px-4 py-3 font-medium text-right">Tokens</th>
-              <th className="px-4 py-3 font-medium text-right">Cost</th>
-              <th className="px-4 py-3 font-medium text-right">Latency</th>
-              <th className="px-4 py-3 font-medium text-center">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
-                  Loading...
-                </td>
+      {/* Empty state rendered outside the table */}
+      {!loading && traces.length === 0 ? (
+        <EmptyState
+          title="No traces yet"
+          description="Point your agents at the proxy to get started"
+          code="OPENAI_BASE_URL=http://localhost:4400/v1"
+        />
+      ) : (
+        /* Table */
+        <div className="rounded-lg border border-zinc-800 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-zinc-900 text-zinc-400 text-left">
+                <th className="px-4 py-3 font-medium">Time</th>
+                <th className="px-4 py-3 font-medium">Model</th>
+                <th className="px-4 py-3 font-medium">Agent</th>
+                <th className="px-4 py-3 font-medium text-right">Tokens</th>
+                <th className="px-4 py-3 font-medium text-right">Cost</th>
+                <th className="px-4 py-3 font-medium text-right">Latency</th>
+                <th className="px-4 py-3 font-medium text-center">Status</th>
               </tr>
-            ) : traces.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-zinc-500">
-                  No traces captured yet. Point your agents at the proxy to get started.
-                </td>
-              </tr>
-            ) : (
-              traces.map((trace) => (
-                <tr
-                  key={trace.id}
-                  onClick={() =>
-                    setSelectedTraceId((prev) => (prev === trace.id ? null : trace.id))
+            </thead>
+            <tbody>
+              {loading ? (
+                <SkeletonRows rows={5} />
+              ) : (
+                traces.map((trace, index) => {
+                  const isSelected = selectedTraceId === trace.id;
+                  const isKeyboardSelected = selectedIndex === index;
+                  const isEven = index % 2 === 0;
+
+                  let rowClass =
+                    'border-t border-zinc-800 cursor-pointer transition-all duration-100 border-l-2 ';
+
+                  if (isSelected) {
+                    rowClass += 'bg-zinc-800/70 border-l-violet-500';
+                  } else {
+                    rowClass +=
+                      (isEven ? 'bg-zinc-950 ' : 'bg-zinc-900/30 ') +
+                      (isKeyboardSelected
+                        ? 'border-l-violet-500 bg-zinc-800/50'
+                        : 'border-l-transparent hover:bg-zinc-800/50 hover:border-l-violet-500');
                   }
-                  className={`border-t border-zinc-800 cursor-pointer transition-colors ${
-                    selectedTraceId === trace.id
-                      ? 'bg-zinc-800/70'
-                      : 'hover:bg-zinc-900/50'
-                  }`}
-                >
-                  <td className="px-4 py-3 font-mono text-zinc-400 text-xs">
-                    {formatTime(trace.created_at)}
-                  </td>
-                  <td className="px-4 py-3 text-zinc-200">{trace.model}</td>
-                  <td className="px-4 py-3 text-zinc-300">{trace.agent || '—'}</td>
-                  <td className="px-4 py-3 text-right font-mono text-zinc-300">
-                    {formatTokens(trace.tokens_prompt, trace.tokens_completion)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-zinc-300">
-                    {formatCost(trace.cost)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-mono text-zinc-300">
-                    {formatLatency(trace.latency_ms)}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <span className={`font-mono font-medium ${statusColor(trace.status_code)}`}>
-                      {trace.status_code}
-                    </span>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+
+                  return (
+                    <tr
+                      key={trace.id}
+                      ref={(el) => { rowRefs.current[index] = el; }}
+                      onClick={() => {
+                        setSelectedIndex(index);
+                        setSelectedTraceId((prev) => (prev === trace.id ? null : trace.id));
+                      }}
+                      className={rowClass}
+                    >
+                      <td
+                        className="px-4 py-2 font-mono text-zinc-400 text-xs"
+                        title={trace.created_at}
+                      >
+                        {timeAgo(trace.created_at)}
+                      </td>
+                      <td className="px-4 py-2 text-zinc-200">{trace.model}</td>
+                      <td className="px-4 py-2 text-zinc-300">
+                        {trace.agent ?? <span className="text-zinc-500">—</span>}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono text-zinc-300">
+                        {formatTokens(trace.tokens_prompt, trace.tokens_completion)}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono text-zinc-300">
+                        {formatCost(trace.cost)}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono text-zinc-300">
+                        {formatLatency(trace.latency_ms)}
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <span className={`font-mono font-medium ${statusColor(trace.status_code)}`}>
+                          {trace.status_code}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Detail Inspector */}
       {selectedTraceId && (
         <DetailInspector
           traceId={selectedTraceId}
-          onClose={() => setSelectedTraceId(null)}
+          onClose={() => {
+            setSelectedTraceId(null);
+            setSelectedIndex(-1);
+          }}
         />
       )}
     </div>

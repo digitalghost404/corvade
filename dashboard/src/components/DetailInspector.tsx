@@ -134,14 +134,6 @@ export default function DetailInspector({ traceId, onClose }: Props) {
     };
   }, [traceId]);
 
-  useEffect(() => {
-    function handleKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [onClose]);
-
   const truncatedId = traceId.length > 12 ? `${traceId.slice(0, 8)}…` : traceId;
 
   const tabClass = (active: boolean) =>
