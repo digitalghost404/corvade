@@ -6,6 +6,7 @@ import DetailInspector from '@/components/DetailInspector';
 import SkeletonRows from '@/components/SkeletonRows';
 import EmptyState from '@/components/EmptyState';
 import { useKeyboard } from '@/hooks/useKeyboard';
+import { getWS } from '@/lib/wsClient';
 
 interface Trace {
   id: string;
@@ -24,6 +25,12 @@ function statusColor(status: number): string {
   if (status >= 400) return 'text-red-400';
   if (status >= 200 && status < 300) return 'text-green-400';
   return 'text-zinc-400';
+}
+
+function urgencyClass(status: number): string {
+  if (status === 429) return 'row-rate-limit';
+  if (status >= 400) return 'row-error';
+  return '';
 }
 
 function timeAgo(iso: string): string {
@@ -70,6 +77,9 @@ export default function Timeline() {
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedTraceId, setSelectedTraceId] = useState<string | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  // ID of the most recently arrived trace — drives the scanline animation
+  const [scanTraceId, setScanTraceId] = useState<string | null>(null);
+  const scanTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
   const rowRefs = useRef<(HTMLTableRowElement | null)[]>([]);
@@ -104,6 +114,26 @@ export default function Timeline() {
     }, 300);
     return () => clearTimeout(timer);
   }, [agentFilter, modelFilter, searchFilter, load]);
+
+  // Subscribe to trace:new to trigger reload + scanline on the new row
+  useEffect(() => {
+    const handleTraceNew = (data: { id?: string }) => {
+      load();
+      if (data?.id) {
+        setScanTraceId(data.id);
+        if (scanTimer.current) clearTimeout(scanTimer.current);
+        scanTimer.current = setTimeout(() => setScanTraceId(null), 700);
+      }
+    };
+
+    const wsClient = getWS();
+    wsClient.on('trace:new', handleTraceNew);
+
+    return () => {
+      wsClient.off('trace:new', handleTraceNew);
+      if (scanTimer.current) clearTimeout(scanTimer.current);
+    };
+  }, [load]);
 
   // Scroll selected row into view
   useEffect(() => {
@@ -234,6 +264,8 @@ export default function Timeline() {
                   const isSelected = selectedTraceId === trace.id;
                   const isKeyboardSelected = selectedIndex === index;
                   const isEven = index % 2 === 0;
+                  const isScanning = scanTraceId === trace.id;
+                  const errorClass = urgencyClass(trace.status_code);
 
                   let rowClass =
                     'border-t border-zinc-800 cursor-pointer transition-all duration-100 border-l-2 ';
@@ -247,6 +279,9 @@ export default function Timeline() {
                         ? 'border-l-violet-500 bg-zinc-800/50'
                         : 'border-l-transparent hover:bg-zinc-800/50 hover:border-l-violet-500');
                   }
+
+                  if (isScanning) rowClass += ' trace-scan';
+                  if (errorClass) rowClass += ` ${errorClass}`;
 
                   return (
                     <tr

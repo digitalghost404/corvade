@@ -91,6 +91,7 @@ function WiredEyeIcon() {
         stroke="#52525b"
         strokeWidth="1.5"
         fill="none"
+        style={{ animation: 'eye-blink 6s ease-in-out infinite' }}
       />
       {/* Pupil */}
       <circle
@@ -98,6 +99,7 @@ function WiredEyeIcon() {
         cy="24"
         r="2.5"
         fill="#52525b"
+        style={{ animation: 'eye-blink 6s ease-in-out infinite' }}
       />
     </svg>
   );
