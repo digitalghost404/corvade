@@ -19,6 +19,7 @@ type APIServer struct {
 func NewAPIServer(store *capture.Store, hub *Hub, port int) *APIServer {
 	mux := http.NewServeMux()
 	RegisterRoutes(mux, store, hub)
+	mux.Handle("/", DashboardHandler())
 	return &APIServer{store: store, hub: hub, mux: mux, port: port}
 }
 
