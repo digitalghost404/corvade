@@ -1,6 +1,7 @@
 package capture
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1115,3 +1116,352 @@ func TestGetSessionGraphEmpty(t *testing.T) {
 		t.Errorf("expected 0 edges, got %d", len(edges))
 	}
 }
+
+func TestInsertTraceWithPolicyViolations(t *testing.T) {
+	dbPath := tempDB(t)
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore failed: %v", err)
+	}
+	defer s.Close()
+
+	violations := `[{"rule":"max_tokens","mode":"enforce"}]`
+	tr := Trace{
+		Provider:         "openai",
+		Model:            "gpt-4",
+		Request:          `{}`,
+		StatusCode:       200,
+		PolicyViolations: &violations,
+	}
+
+	id, err := s.InsertTrace(tr)
+	if err != nil {
+		t.Fatalf("InsertTrace with violations failed: %v", err)
+	}
+	if id == "" {
+		t.Fatal("InsertTrace returned empty ID")
+	}
+}
+
+func TestGetTraceRoundTripPolicyViolations(t *testing.T) {
+	dbPath := tempDB(t)
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore failed: %v", err)
+	}
+	defer s.Close()
+
+	violations := `[{"rule":"max_tokens","mode":"enforce"},{"rule":"blocked_model","mode":"warn"}]`
+	tr := Trace{
+		Provider:         "openai",
+		Model:            "gpt-4",
+		Request:          `{}`,
+		StatusCode:       200,
+		PolicyViolations: &violations,
+	}
+
+	id, err := s.InsertTrace(tr)
+	if err != nil {
+		t.Fatalf("InsertTrace failed: %v", err)
+	}
+
+	got, err := s.GetTrace(id)
+	if err != nil {
+		t.Fatalf("GetTrace failed: %v", err)
+	}
+
+	if got.PolicyViolations == nil {
+		t.Fatal("PolicyViolations should not be nil")
+	}
+	if *got.PolicyViolations != violations {
+		t.Errorf("PolicyViolations: got %s, want %s", *got.PolicyViolations, violations)
+	}
+}
+
+func TestGetTraceNilPolicyViolations(t *testing.T) {
+	dbPath := tempDB(t)
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore failed: %v", err)
+	}
+	defer s.Close()
+
+	tr := Trace{
+		Provider:   "openai",
+		Model:      "gpt-4",
+		Request:    `{}`,
+		StatusCode: 200,
+	}
+
+	id, err := s.InsertTrace(tr)
+	if err != nil {
+		t.Fatalf("InsertTrace failed: %v", err)
+	}
+
+	got, err := s.GetTrace(id)
+	if err != nil {
+		t.Fatalf("GetTrace failed: %v", err)
+	}
+
+	if got.PolicyViolations != nil {
+		t.Errorf("PolicyViolations should be nil, got %v", got.PolicyViolations)
+	}
+}
+
+func TestListTracesIncludesPolicyViolations(t *testing.T) {
+	dbPath := tempDB(t)
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore failed: %v", err)
+	}
+	defer s.Close()
+
+	violations := `[{"rule":"max_tokens","mode":"enforce"}]`
+	tr := Trace{
+		Provider:         "openai",
+		Model:            "gpt-4",
+		Request:          `{}`,
+		StatusCode:       200,
+		PolicyViolations: &violations,
+	}
+	_, err = s.InsertTrace(tr)
+	if err != nil {
+		t.Fatalf("InsertTrace failed: %v", err)
+	}
+
+	traces, err := s.ListTraces(TraceFilter{})
+	if err != nil {
+		t.Fatalf("ListTraces failed: %v", err)
+	}
+	if len(traces) != 1 {
+		t.Fatalf("expected 1 trace, got %d", len(traces))
+	}
+	if traces[0].PolicyViolations == nil {
+		t.Fatal("PolicyViolations should not be nil in listed trace")
+	}
+	if *traces[0].PolicyViolations != violations {
+		t.Errorf("PolicyViolations: got %s, want %s", *traces[0].PolicyViolations, violations)
+	}
+}
+
+func TestListTracesHasViolationsFilter(t *testing.T) {
+	dbPath := tempDB(t)
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore failed: %v", err)
+	}
+	defer s.Close()
+
+	// Insert trace WITH violations
+	violations := `[{"rule":"max_tokens","mode":"enforce"}]`
+	tr1 := Trace{
+		Provider:         "openai",
+		Model:            "gpt-4",
+		Request:          `{}`,
+		StatusCode:       200,
+		PolicyViolations: &violations,
+	}
+	_, err = s.InsertTrace(tr1)
+	if err != nil {
+		t.Fatalf("InsertTrace (with violations) failed: %v", err)
+	}
+
+	// Insert trace WITHOUT violations
+	tr2 := Trace{
+		Provider:   "openai",
+		Model:      "gpt-4",
+		Request:    `{}`,
+		StatusCode: 200,
+	}
+	_, err = s.InsertTrace(tr2)
+	if err != nil {
+		t.Fatalf("InsertTrace (no violations) failed: %v", err)
+	}
+
+	// Insert trace with empty array (should NOT count as having violations)
+	empty := `[]`
+	tr3 := Trace{
+		Provider:         "openai",
+		Model:            "gpt-4",
+		Request:          `{}`,
+		StatusCode:       200,
+		PolicyViolations: &empty,
+	}
+	_, err = s.InsertTrace(tr3)
+	if err != nil {
+		t.Fatalf("InsertTrace (empty violations) failed: %v", err)
+	}
+
+	// HasViolations=true should only return the one with real violations
+	hasViolations := true
+	filtered, err := s.ListTraces(TraceFilter{HasViolations: &hasViolations})
+	if err != nil {
+		t.Fatalf("ListTraces (HasViolations=true) failed: %v", err)
+	}
+	if len(filtered) != 1 {
+		t.Errorf("ListTraces (HasViolations=true): got %d, want 1", len(filtered))
+	}
+
+	// No HasViolations filter should return all
+	all, err := s.ListTraces(TraceFilter{})
+	if err != nil {
+		t.Fatalf("ListTraces (all) failed: %v", err)
+	}
+	if len(all) != 3 {
+		t.Errorf("ListTraces (all): got %d, want 3", len(all))
+	}
+}
+
+func TestGetStatsViolationAggregation(t *testing.T) {
+	dbPath := tempDB(t)
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore failed: %v", err)
+	}
+	defer s.Close()
+
+	v1 := `[{"rule":"max_tokens","mode":"enforce"},{"rule":"blocked_model","mode":"warn"}]`
+	v2 := `[{"rule":"max_tokens","mode":"enforce"}]`
+
+	tr1 := Trace{Provider: "openai", Model: "gpt-4", Request: `{}`, StatusCode: 200, PolicyViolations: &v1}
+	tr2 := Trace{Provider: "openai", Model: "gpt-4", Request: `{}`, StatusCode: 200, PolicyViolations: &v2}
+	tr3 := Trace{Provider: "openai", Model: "gpt-4", Request: `{}`, StatusCode: 200} // no violations
+
+	for _, tr := range []Trace{tr1, tr2, tr3} {
+		_, err := s.InsertTrace(tr)
+		if err != nil {
+			t.Fatalf("InsertTrace failed: %v", err)
+		}
+	}
+
+	stats, err := s.GetStats(nil, nil)
+	if err != nil {
+		t.Fatalf("GetStats failed: %v", err)
+	}
+
+	if stats.ViolationsByRule == nil {
+		t.Fatal("ViolationsByRule should not be nil")
+	}
+	if stats.ViolationsByMode == nil {
+		t.Fatal("ViolationsByMode should not be nil")
+	}
+
+	// max_tokens appears in v1 and v2 = 2
+	if stats.ViolationsByRule["max_tokens"] != 2 {
+		t.Errorf("ViolationsByRule[max_tokens]: got %d, want 2", stats.ViolationsByRule["max_tokens"])
+	}
+	// blocked_model appears in v1 only = 1
+	if stats.ViolationsByRule["blocked_model"] != 1 {
+		t.Errorf("ViolationsByRule[blocked_model]: got %d, want 1", stats.ViolationsByRule["blocked_model"])
+	}
+	// enforce mode: v1 has 1, v2 has 1 = 2
+	if stats.ViolationsByMode["enforce"] != 2 {
+		t.Errorf("ViolationsByMode[enforce]: got %d, want 2", stats.ViolationsByMode["enforce"])
+	}
+	// warn mode: v1 has 1 = 1
+	if stats.ViolationsByMode["warn"] != 1 {
+		t.Errorf("ViolationsByMode[warn]: got %d, want 1", stats.ViolationsByMode["warn"])
+	}
+}
+
+func TestGetStatsViolationsRespectsTimeRange(t *testing.T) {
+	dbPath := tempDB(t)
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore failed: %v", err)
+	}
+	defer s.Close()
+
+	// Insert an old trace with violations directly
+	oldTime := time.Now().UTC().AddDate(0, 0, -10).Format(time.RFC3339Nano)
+	oldViolations := `[{"rule":"old_rule","mode":"enforce"}]`
+	_, err = s.DB().Exec(`INSERT INTO traces
+		(id, provider, model, request, status_code, policy_violations, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		"OLD00000000000000000000002", "openai", "gpt-4", `{}`, 200, oldViolations, oldTime,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Insert a recent trace with violations
+	recentViolations := `[{"rule":"new_rule","mode":"warn"}]`
+	tr := Trace{
+		Provider:         "openai",
+		Model:            "gpt-4",
+		Request:          `{}`,
+		StatusCode:       200,
+		PolicyViolations: &recentViolations,
+	}
+	_, err = s.InsertTrace(tr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Query only recent (last 5 days)
+	from := time.Now().UTC().AddDate(0, 0, -5)
+	stats, err := s.GetStats(&from, nil)
+	if err != nil {
+		t.Fatalf("GetStats failed: %v", err)
+	}
+
+	if stats.ViolationsByRule["new_rule"] != 1 {
+		t.Errorf("ViolationsByRule[new_rule]: got %d, want 1", stats.ViolationsByRule["new_rule"])
+	}
+	if stats.ViolationsByRule["old_rule"] != 0 {
+		t.Errorf("ViolationsByRule[old_rule]: got %d, want 0 (should be filtered out)", stats.ViolationsByRule["old_rule"])
+	}
+}
+
+func TestSchemaMigrationIdempotent(t *testing.T) {
+	dbPath := tempDB(t)
+
+	// Open store twice - migration should run without error both times
+	s1, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore (first) failed: %v", err)
+	}
+	s1.Close()
+
+	s2, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore (second) failed: %v", err)
+	}
+	defer s2.Close()
+
+	// Verify rate_limit_state table exists
+	var name string
+	err = s2.DB().QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='rate_limit_state'").Scan(&name)
+	if err != nil {
+		t.Errorf("rate_limit_state table not found: %v", err)
+	}
+
+	// Verify policy_violations column exists on traces
+	rows, err := s2.DB().Query("PRAGMA table_info(traces)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	found := false
+	for rows.Next() {
+		var cid int
+		var colName, colType string
+		var notNull int
+		var dfltValue *string
+		var pk int
+		if err := rows.Scan(&cid, &colName, &colType, &notNull, &dfltValue, &pk); err != nil {
+			t.Fatal(err)
+		}
+		if colName == "policy_violations" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("policy_violations column not found in traces table")
+	}
+}
+
+// Ensure json import is used
+var _ = json.Marshal

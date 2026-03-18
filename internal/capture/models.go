@@ -19,6 +19,7 @@ type Trace struct {
 	LatencyMS        *int      `json:"latency_ms"`
 	TTFTMS           *int      `json:"ttft_ms"`
 	APIKeyHash       *string   `json:"api_key_hash"`
+	PolicyViolations *string   `json:"policy_violations"` // JSON array of violations, or null
 	CreatedAt        time.Time `json:"created_at"`
 }
 

@@ -3,6 +3,7 @@ package capture
 import (
 	"crypto/rand"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,13 +21,14 @@ func NewULID() string {
 
 // TraceFilter specifies optional filters for listing traces.
 type TraceFilter struct {
-	SessionID *string
-	Provider  *string
-	Model     *string
-	Agent     *string
-	Search    *string
-	Limit     *int
-	Offset    *int
+	SessionID     *string
+	Provider      *string
+	Model         *string
+	Agent         *string
+	Search        *string
+	HasViolations *bool
+	Limit         *int
+	Offset        *int
 }
 
 // SessionFilter specifies optional filters for listing sessions.
@@ -38,11 +40,13 @@ type SessionFilter struct {
 
 // Stats holds aggregate statistics across traces.
 type Stats struct {
-	TraceCount  int            `json:"trace_count"`
-	TotalCost   float64        `json:"total_cost"`
-	TotalTokens int            `json:"total_tokens"`
-	ByModel     map[string]int `json:"by_model"`
-	ByAgent     map[string]int `json:"by_agent"`
+	TraceCount       int            `json:"trace_count"`
+	TotalCost        float64        `json:"total_cost"`
+	TotalTokens      int            `json:"total_tokens"`
+	ByModel          map[string]int `json:"by_model"`
+	ByAgent          map[string]int `json:"by_agent"`
+	ViolationsByRule map[string]int `json:"violations_by_rule"`
+	ViolationsByMode map[string]int `json:"violations_by_mode"`
 }
 
 // Store is a SQLite-backed storage for traces, sessions, and graph data.
@@ -146,7 +150,61 @@ func NewStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("run schema migration: %w", err)
 	}
 
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("run incremental migration: %w", err)
+	}
+
 	return &Store{db: db}, nil
+}
+
+// migrate runs incremental schema migrations that cannot be expressed with
+// CREATE TABLE IF NOT EXISTS (e.g., adding columns to existing tables).
+func migrate(db *sql.DB) error {
+	// Add policy_violations column if not exists
+	rows, err := db.Query("PRAGMA table_info(traces)")
+	if err != nil {
+		return fmt.Errorf("pragma table_info: %w", err)
+	}
+	defer rows.Close()
+
+	hasColumn := false
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull int
+		var dfltValue *string
+		var pk int
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err != nil {
+			return fmt.Errorf("scan pragma: %w", err)
+		}
+		if name == "policy_violations" {
+			hasColumn = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	if !hasColumn {
+		if _, err := db.Exec("ALTER TABLE traces ADD COLUMN policy_violations TEXT"); err != nil {
+			return fmt.Errorf("add policy_violations column: %w", err)
+		}
+	}
+
+	// Create rate_limit_state table
+	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS rate_limit_state (
+		scope_key    TEXT PRIMARY KEY,
+		window_start TEXT NOT NULL,
+		count        INTEGER DEFAULT 0,
+		updated_at   TEXT NOT NULL
+	)`)
+	if err != nil {
+		return fmt.Errorf("create rate_limit_state: %w", err)
+	}
+
+	return nil
 }
 
 // DB returns the underlying *sql.DB for use by other packages (e.g., retention).
@@ -167,12 +225,12 @@ func (s *Store) InsertTrace(tr Trace) (string, error) {
 	_, err := s.db.Exec(`INSERT INTO traces
 		(id, session_id, agent, step, provider, model, request, response,
 		 status_code, tokens_prompt, tokens_completion, tokens_cached,
-		 cost, latency_ms, ttft_ms, api_key_hash, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 cost, latency_ms, ttft_ms, api_key_hash, policy_violations, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		tr.ID, tr.SessionID, tr.Agent, tr.Step, tr.Provider, tr.Model,
 		tr.Request, tr.Response, tr.StatusCode,
 		tr.TokensPrompt, tr.TokensCompletion, tr.TokensCached,
-		tr.Cost, tr.LatencyMS, tr.TTFTMS, tr.APIKeyHash,
+		tr.Cost, tr.LatencyMS, tr.TTFTMS, tr.APIKeyHash, tr.PolicyViolations,
 		tr.CreatedAt.UTC().Format(time.RFC3339Nano),
 	)
 	if err != nil {
@@ -189,12 +247,12 @@ func (s *Store) GetTrace(id string) (Trace, error) {
 	err := s.db.QueryRow(`SELECT
 		id, session_id, agent, step, provider, model, request, response,
 		status_code, tokens_prompt, tokens_completion, tokens_cached,
-		cost, latency_ms, ttft_ms, api_key_hash, created_at
+		cost, latency_ms, ttft_ms, api_key_hash, policy_violations, created_at
 		FROM traces WHERE id = ?`, id).Scan(
 		&tr.ID, &tr.SessionID, &tr.Agent, &tr.Step, &tr.Provider, &tr.Model,
 		&tr.Request, &tr.Response, &tr.StatusCode,
 		&tr.TokensPrompt, &tr.TokensCompletion, &tr.TokensCached,
-		&tr.Cost, &tr.LatencyMS, &tr.TTFTMS, &tr.APIKeyHash,
+		&tr.Cost, &tr.LatencyMS, &tr.TTFTMS, &tr.APIKeyHash, &tr.PolicyViolations,
 		&createdAt,
 	)
 	if err != nil {
@@ -210,7 +268,7 @@ func (s *Store) ListTraces(f TraceFilter) ([]Trace, error) {
 	query := `SELECT
 		id, session_id, agent, step, provider, model, request, response,
 		status_code, tokens_prompt, tokens_completion, tokens_cached,
-		cost, latency_ms, ttft_ms, api_key_hash, created_at
+		cost, latency_ms, ttft_ms, api_key_hash, policy_violations, created_at
 		FROM traces`
 
 	var conditions []string
@@ -236,6 +294,9 @@ func (s *Store) ListTraces(f TraceFilter) ([]Trace, error) {
 		conditions = append(conditions, "(request LIKE ? OR response LIKE ? OR model LIKE ? OR agent LIKE ?)")
 		pattern := "%" + *f.Search + "%"
 		args = append(args, pattern, pattern, pattern, pattern)
+	}
+	if f.HasViolations != nil && *f.HasViolations {
+		conditions = append(conditions, "policy_violations IS NOT NULL AND policy_violations != 'null' AND policy_violations != '[]'")
 	}
 
 	if len(conditions) > 0 {
@@ -265,7 +326,7 @@ func (s *Store) ListTraces(f TraceFilter) ([]Trace, error) {
 			&tr.ID, &tr.SessionID, &tr.Agent, &tr.Step, &tr.Provider, &tr.Model,
 			&tr.Request, &tr.Response, &tr.StatusCode,
 			&tr.TokensPrompt, &tr.TokensCompletion, &tr.TokensCached,
-			&tr.Cost, &tr.LatencyMS, &tr.TTFTMS, &tr.APIKeyHash,
+			&tr.Cost, &tr.LatencyMS, &tr.TTFTMS, &tr.APIKeyHash, &tr.PolicyViolations,
 			&createdAt,
 		)
 		if err != nil {
@@ -561,6 +622,8 @@ func (s *Store) GetStats(from, to *time.Time) (Stats, error) {
 	var stats Stats
 	stats.ByModel = make(map[string]int)
 	stats.ByAgent = make(map[string]int)
+	stats.ViolationsByRule = make(map[string]int)
+	stats.ViolationsByMode = make(map[string]int)
 
 	err := s.db.QueryRow(query, args...).Scan(&stats.TraceCount, &stats.TotalCost, &stats.TotalTokens)
 	if err != nil {
@@ -599,6 +662,37 @@ func (s *Store) GetStats(from, to *time.Time) (Stats, error) {
 			var count int
 			if agentRows.Scan(&agent, &count) == nil {
 				stats.ByAgent[agent] = count
+			}
+		}
+	}
+
+	// Violation aggregation
+	violationQuery := "SELECT policy_violations FROM traces WHERE policy_violations IS NOT NULL AND policy_violations != 'null' AND policy_violations != '[]'"
+	if len(conditions) > 0 {
+		violationQuery += " AND " + strings.Join(conditions, " AND ")
+	}
+	violationRows, err := s.db.Query(violationQuery, args...)
+	if err == nil {
+		defer violationRows.Close()
+		for violationRows.Next() {
+			var raw string
+			if violationRows.Scan(&raw) != nil {
+				continue
+			}
+			var violations []struct {
+				Rule string `json:"rule"`
+				Mode string `json:"mode"`
+			}
+			if json.Unmarshal([]byte(raw), &violations) != nil {
+				continue
+			}
+			for _, v := range violations {
+				if v.Rule != "" {
+					stats.ViolationsByRule[v.Rule]++
+				}
+				if v.Mode != "" {
+					stats.ViolationsByMode[v.Mode]++
+				}
 			}
 		}
 	}
