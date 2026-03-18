@@ -84,8 +84,26 @@ func (r *PIIRedactionRule) Evaluate(ctx policy.EvalContext) *policy.Violation {
 	return result.Violation
 }
 
+// EvaluateWithPIIResult implements policy.PIIRedactor, returning a PIIResult
+// that the engine can use to access the modified body without importing this package.
+func (r *PIIRedactionRule) EvaluateWithPIIResult(ctx policy.EvalContext) *policy.PIIResult {
+	ewm := r.evaluateInternal(ctx)
+	if ewm == nil {
+		return nil
+	}
+	return &policy.PIIResult{
+		Violation: ewm.Violation,
+		Modified:  ewm.Modified,
+	}
+}
+
 // EvaluateWithResult returns both a violation and optional modified body (for redaction).
 func (r *PIIRedactionRule) EvaluateWithResult(ctx policy.EvalContext) *EvalResultWithModified {
+	return r.evaluateInternal(ctx)
+}
+
+// evaluateInternal is the shared implementation for both result methods.
+func (r *PIIRedactionRule) evaluateInternal(ctx policy.EvalContext) *EvalResultWithModified {
 	if len(ctx.RequestBody) == 0 {
 		return nil
 	}
