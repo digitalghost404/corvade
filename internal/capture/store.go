@@ -38,9 +38,11 @@ type SessionFilter struct {
 
 // Stats holds aggregate statistics across traces.
 type Stats struct {
-	TraceCount  int     `json:"trace_count"`
-	TotalCost   float64 `json:"total_cost"`
-	TotalTokens int     `json:"total_tokens"`
+	TraceCount  int            `json:"trace_count"`
+	TotalCost   float64        `json:"total_cost"`
+	TotalTokens int            `json:"total_tokens"`
+	ByModel     map[string]int `json:"by_model"`
+	ByAgent     map[string]int `json:"by_agent"`
 }
 
 // Store is a SQLite-backed storage for traces, sessions, and graph data.
@@ -557,9 +559,49 @@ func (s *Store) GetStats(from, to *time.Time) (Stats, error) {
 	}
 
 	var stats Stats
+	stats.ByModel = make(map[string]int)
+	stats.ByAgent = make(map[string]int)
+
 	err := s.db.QueryRow(query, args...).Scan(&stats.TraceCount, &stats.TotalCost, &stats.TotalTokens)
 	if err != nil {
 		return Stats{}, fmt.Errorf("get stats: %w", err)
 	}
+
+	// By model breakdown
+	modelQuery := "SELECT model, COUNT(*) FROM traces"
+	if len(conditions) > 0 {
+		modelQuery += " WHERE " + strings.Join(conditions, " AND ")
+	}
+	modelQuery += " GROUP BY model"
+	modelRows, err := s.db.Query(modelQuery, args...)
+	if err == nil {
+		defer modelRows.Close()
+		for modelRows.Next() {
+			var model string
+			var count int
+			if modelRows.Scan(&model, &count) == nil {
+				stats.ByModel[model] = count
+			}
+		}
+	}
+
+	// By agent breakdown
+	agentQuery := "SELECT agent, COUNT(*) FROM traces WHERE agent IS NOT NULL"
+	if len(conditions) > 0 {
+		agentQuery += " AND " + strings.Join(conditions, " AND ")
+	}
+	agentQuery += " GROUP BY agent"
+	agentRows, err := s.db.Query(agentQuery, args...)
+	if err == nil {
+		defer agentRows.Close()
+		for agentRows.Next() {
+			var agent string
+			var count int
+			if agentRows.Scan(&agent, &count) == nil {
+				stats.ByAgent[agent] = count
+			}
+		}
+	}
+
 	return stats, nil
 }
