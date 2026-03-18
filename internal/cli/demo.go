@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/corvade/corvade/internal/capture"
+	"github.com/corvade/corvade/internal/cost"
+	"github.com/corvade/corvade/internal/proxy/providers"
 )
 
 //go:embed testdata/*.json
@@ -26,8 +28,9 @@ type fixtureTrace struct {
 }
 
 // loadDemoData reads all embedded fixture JSON files and inserts each trace
-// into the store. Returns the total number of traces inserted.
+// into the store, parsing token counts and calculating costs. Returns the total number of traces inserted.
 func loadDemoData(store *capture.Store) (int, error) {
+	calc := cost.NewCalculator(nil)
 	entries, err := fs.ReadDir(demoFS, "testdata")
 	if err != nil {
 		return 0, fmt.Errorf("reading embedded testdata: %w", err)
@@ -63,6 +66,24 @@ func loadDemoData(store *capture.Store) (int, error) {
 				Response:   f.Response,
 				StatusCode: f.StatusCode,
 				CreatedAt:  createdAt,
+			}
+
+			// Extract tokens and calculate cost from response body
+			if f.Response != nil {
+				var respInfo *providers.ResponseInfo
+				switch f.Provider {
+				case "openai":
+					respInfo, _ = providers.OpenAIParseResponse([]byte(*f.Response))
+				case "anthropic":
+					respInfo, _ = providers.AnthropicParseResponse([]byte(*f.Response))
+				}
+				if respInfo != nil {
+					tr.TokensPrompt = &respInfo.PromptTokens
+					tr.TokensCompletion = &respInfo.CompletionTokens
+					tr.TokensCached = &respInfo.CachedTokens
+					c := calc.Calculate(f.Model, respInfo.PromptTokens, respInfo.CompletionTokens)
+					tr.Cost = &c
+				}
 			}
 
 			if _, err := store.InsertTrace(tr); err != nil {
