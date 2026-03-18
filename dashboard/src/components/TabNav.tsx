@@ -13,7 +13,7 @@ export default function TabNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="w-full flex flex-row overflow-x-auto bg-zinc-950 border-b border-zinc-800">
+    <nav className="w-full flex flex-row overflow-x-auto bg-zinc-950/80 border-b border-zinc-800" style={{ backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
       {TABS.map(({ label, href }) => {
         const isActive = pathname === href;
         return (

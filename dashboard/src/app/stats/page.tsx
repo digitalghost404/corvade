@@ -52,7 +52,7 @@ function fromForRange(range: Range): string | undefined {
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+    <div className="glass neon-edge rounded-lg p-4">
       <div className="text-2xl font-semibold text-violet-400 tabular-nums">{value}</div>
       <div className="text-zinc-400 text-xs uppercase tracking-wider mt-1">{label}</div>
     </div>

@@ -19,7 +19,7 @@ interface Metric {
 
 function MetricCard({ label, value }: Metric) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 flex-1 min-w-0">
+    <div className="glass neon-edge rounded-lg px-4 py-3 flex-1 min-w-0">
       <div className="tabular-nums text-violet-400 text-lg font-semibold">{value}</div>
       <div className="text-zinc-400 text-xs uppercase tracking-wider mt-1">{label}</div>
     </div>

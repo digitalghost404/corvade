@@ -137,7 +137,7 @@ export default function DiffPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="space-y-6">
         {/* Pickers row */}
-        <div className="flex flex-col sm:flex-row gap-3 items-end">
+        <div className="glass rounded-lg p-4 flex flex-col sm:flex-row gap-3 items-end">
           <SessionCombobox
             label="Session A"
             value={inputA}
@@ -165,7 +165,9 @@ export default function DiffPage() {
 
         {/* Result or empty state */}
         {hasResult ? (
-          <SessionDiff sessionA={sessionA} sessionB={sessionB} />
+          <div className="glass rounded-lg overflow-hidden">
+            <SessionDiff sessionA={sessionA} sessionB={sessionB} />
+          </div>
         ) : (
           <EmptyState
             title="Compare agent sessions"

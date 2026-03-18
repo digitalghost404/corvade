@@ -36,7 +36,7 @@ export default function SessionCard({ session }: Props) {
   return (
     <a
       href={`/session?id=${session.id}`}
-      className="block bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-violet-500 transition-colors duration-100"
+      className="block glass neon-edge rounded-lg p-4 hover:border-violet-500 transition-colors duration-100"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <span

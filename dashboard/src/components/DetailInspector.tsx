@@ -154,7 +154,7 @@ export default function DetailInspector({ traceId, onClose }: Props) {
     }`;
 
   return (
-    <div className="mt-4 rounded-lg border border-zinc-700 bg-zinc-950 overflow-hidden">
+    <div className="mt-4 rounded-lg overflow-hidden glass neon-edge">
       <div className={`inspector-enter ${isOpen ? 'open' : ''}`}>
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-4 py-3 bg-zinc-900 border-b border-zinc-800">

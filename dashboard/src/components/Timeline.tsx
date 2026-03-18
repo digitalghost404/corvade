@@ -243,7 +243,7 @@ export default function Timeline() {
         />
       ) : (
         /* Table */
-        <div className="rounded-lg border border-zinc-800 overflow-hidden">
+        <div className="glass neon-edge rounded-lg overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-zinc-900 text-zinc-400 text-left">
