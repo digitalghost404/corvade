@@ -50,6 +50,16 @@ func RegisterRoutes(mux *http.ServeMux, store *capture.Store, hub *Hub) {
 			return
 		}
 
+		if len(parts) == 2 && parts[1] == "narrative" {
+			topo.GetNarrative(w, r, id)
+			return
+		}
+
+		if len(parts) == 3 && parts[1] == "narrative" && parts[2] == "enhance" {
+			topo.EnhanceNarrative(w, r, id)
+			return
+		}
+
 		if len(parts) == 3 && parts[1] == "diff" {
 			diff.Diff(w, r, id, parts[2])
 			return
