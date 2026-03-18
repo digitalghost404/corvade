@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/corvade/corvade/internal/cli"
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +26,11 @@ var versionCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(cli.NewStartCmd(version))
+	rootCmd.AddCommand(cli.NewTailCmd())
+	rootCmd.AddCommand(cli.NewDoctorCmd())
+	rootCmd.AddCommand(cli.NewSessionsCmd())
+	rootCmd.AddCommand(cli.NewInspectCmd())
 }
 
 func main() {
