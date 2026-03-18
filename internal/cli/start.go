@@ -69,6 +69,15 @@ func runStart(version string, headless, demo bool, portOverride, dashboardPortOv
 	}
 	defer store.Close()
 
+	// 2b. Load demo data if requested
+	if demo {
+		count, err := loadDemoData(store)
+		if err != nil {
+			return fmt.Errorf("loading demo data: %w", err)
+		}
+		fmt.Printf("  Loaded %d demo traces\n", count)
+	}
+
 	// 3. Create cost calculator with overrides from config
 	overrides := make(map[string]cost.ModelPricing)
 	for model, co := range cfg.CostOverrides {

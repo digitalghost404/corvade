@@ -1,0 +1,11 @@
+[
+  {
+    "id": "01DEMO_SINGLE_001",
+    "provider": "openai",
+    "model": "gpt-4o",
+    "request": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"user\",\"content\":\"What is the capital of France?\"}]}",
+    "response": "{\"id\":\"chatcmpl-demo1\",\"model\":\"gpt-4o\",\"choices\":[{\"message\":{\"content\":\"The capital of France is Paris.\"}}],\"usage\":{\"prompt_tokens\":15,\"completion_tokens\":8}}",
+    "status_code": 200,
+    "created_at": "2026-03-18T10:00:00Z"
+  }
+]

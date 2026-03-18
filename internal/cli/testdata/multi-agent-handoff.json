@@ -1,0 +1,22 @@
+[
+  {
+    "id": "01DEMO_MULTI_001",
+    "agent": "research-bot",
+    "provider": "openai",
+    "model": "gpt-4o",
+    "request": "{\"model\":\"gpt-4o\",\"messages\":[{\"role\":\"user\",\"content\":\"Find info about AI agents\"}]}",
+    "response": "{\"choices\":[{\"message\":{\"content\":\"AI agents are autonomous...\"}}],\"usage\":{\"prompt_tokens\":20,\"completion_tokens\":50}}",
+    "status_code": 200,
+    "created_at": "2026-03-18T10:01:00Z"
+  },
+  {
+    "id": "01DEMO_MULTI_002",
+    "agent": "summarizer",
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-6",
+    "request": "{\"model\":\"claude-sonnet-4-6\",\"messages\":[{\"role\":\"user\",\"content\":\"Summarize: AI agents are autonomous...\"}]}",
+    "response": "{\"content\":[{\"type\":\"text\",\"text\":\"AI agents are software that acts independently.\"}],\"usage\":{\"input_tokens\":30,\"output_tokens\":12}}",
+    "status_code": 200,
+    "created_at": "2026-03-18T10:01:05Z"
+  }
+]
