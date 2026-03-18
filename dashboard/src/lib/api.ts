@@ -29,6 +29,11 @@ export async function fetchSessionGraph(id: string) {
   return res.json();
 }
 
+export async function fetchSessionDiff(id1: string, id2: string) {
+  const res = await fetch(`${API_BASE}/api/sessions/${id1}/diff/${id2}`);
+  return res.json();
+}
+
 export async function fetchStats(params?: Record<string, string>) {
   const url = new URL(`${API_BASE}/api/stats`);
   if (params) Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
