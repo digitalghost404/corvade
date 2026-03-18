@@ -13,6 +13,8 @@ import (
 	"github.com/corvade/corvade/internal/capture"
 	"github.com/corvade/corvade/internal/config"
 	"github.com/corvade/corvade/internal/cost"
+	"github.com/corvade/corvade/internal/policy"
+	"github.com/corvade/corvade/internal/policy/rules"
 	"github.com/corvade/corvade/internal/proxy"
 	"github.com/spf13/cobra"
 )
@@ -88,12 +90,32 @@ func runStart(version string, headless, demo bool, portOverride, dashboardPortOv
 	}
 	calc := cost.NewCalculator(overrides)
 
-	// 4. Start WebSocket hub
+	// 4. Load policy engine (optional — startup continues if file is missing)
+	policyPath := filepath.Join(home, ".corvade", "policies.yaml")
+	var policyRuleCount int
+	policyEngine, err := policy.NewEngine(
+		policyPath,
+		store,
+		calc,
+		policy.WithRuleBuilder(rules.DefaultBuilder()),
+	)
+	if err != nil {
+		log.Printf("warning: failed to load policies: %v", err)
+	} else {
+		policyEngine.Start()
+		defer policyEngine.Stop()
+		policyRuleCount = len(policyEngine.Rules())
+	}
+
+	// 5. Start WebSocket hub
 	hub := api.NewHub()
 	go hub.Run()
 
-	// 5. Start proxy server
+	// 6. Start proxy server
 	proxySrv := proxy.NewServer(store, calc, hub)
+	if policyEngine != nil {
+		proxySrv.SetPolicyEngine(policyEngine)
+	}
 	go func() {
 		addr := fmt.Sprintf(":%d", cfg.Port)
 		if err := http.ListenAndServe(addr, proxySrv); err != nil {
@@ -101,7 +123,7 @@ func runStart(version string, headless, demo bool, portOverride, dashboardPortOv
 		}
 	}()
 
-	// 6. Start API server (unless headless)
+	// 7. Start API server (unless headless)
 	if !headless {
 		apiSrv := api.NewAPIServer(store, hub, cfg.DashboardPort)
 		go func() {
@@ -111,7 +133,7 @@ func runStart(version string, headless, demo bool, portOverride, dashboardPortOv
 		}()
 	}
 
-	// 7. Print startup banner
+	// 8. Print startup banner
 	dbSize := getFileSize(dbPath)
 	fmt.Println()
 	fmt.Printf("  ▗▖  Corvade v%s\n", version)
@@ -122,6 +144,9 @@ func runStart(version string, headless, demo bool, portOverride, dashboardPortOv
 		fmt.Printf("  Dashboard:  http://localhost:%d\n", cfg.DashboardPort)
 	}
 	fmt.Printf("  Storage:    %s (%s)\n", dbPath, dbSize)
+	if policyRuleCount > 0 {
+		fmt.Printf("  Policies:   %d rule(s) loaded\n", policyRuleCount)
+	}
 	fmt.Println()
 	fmt.Println("  Point your agents here:")
 	fmt.Printf("    OPENAI_BASE_URL=http://localhost:%d/v1\n", cfg.Port)

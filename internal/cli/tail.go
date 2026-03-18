@@ -72,23 +72,38 @@ func runTail(agentFilter, modelFilter string, port int) error {
 				continue
 			}
 
-			if ev.Type != "trace:new" {
+			switch ev.Type {
+			case "trace:blocked":
+				// Apply filters
+				if agentFilter != "" {
+					if a, ok := ev.Data["agent"].(string); !ok || a != agentFilter {
+						continue
+					}
+				}
+				if modelFilter != "" {
+					if m, ok := ev.Data["model"].(string); !ok || m != modelFilter {
+						continue
+					}
+				}
+				printBlockedEvent(ev.Data)
+
+			case "trace:new":
+				// Apply filters
+				if agentFilter != "" {
+					if a, ok := ev.Data["agent"].(string); !ok || a != agentFilter {
+						continue
+					}
+				}
+				if modelFilter != "" {
+					if m, ok := ev.Data["model"].(string); !ok || m != modelFilter {
+						continue
+					}
+				}
+				printTraceEvent(ev.Data)
+
+			default:
 				continue
 			}
-
-			// Apply filters
-			if agentFilter != "" {
-				if a, ok := ev.Data["agent"].(string); !ok || a != agentFilter {
-					continue
-				}
-			}
-			if modelFilter != "" {
-				if m, ok := ev.Data["model"].(string); !ok || m != modelFilter {
-					continue
-				}
-			}
-
-			printTraceEvent(ev.Data)
 		}
 	}()
 
@@ -133,6 +148,59 @@ func printTraceEvent(data map[string]interface{}) {
 	}
 
 	fmt.Printf("%s %-14s │ %6s │ %5s │ %s\n", ts, model, costStr, latencyStr, summary)
+
+	// Print observe violations if present
+	if violations := extractViolations(data); len(violations) > 0 {
+		for _, v := range violations {
+			ruleType := stringOrDefault(v, "type", "unknown")
+			message := stringOrDefault(v, "message", "")
+			fmt.Printf("         %-14s │        │       │ ⚠ observe: %s (%s)\n", "", ruleType, message)
+		}
+	}
+}
+
+// printBlockedEvent prints a blocked request event from a trace:blocked WebSocket event.
+func printBlockedEvent(data map[string]interface{}) {
+	ts := time.Now().Format("15:04:05")
+
+	model := stringOrDefault(data, "model", "unknown")
+	if len(model) > 14 {
+		model = model[:14]
+	}
+
+	violations := extractViolations(data)
+	if len(violations) > 0 {
+		for _, v := range violations {
+			ruleType := stringOrDefault(v, "type", "unknown")
+			message := stringOrDefault(v, "message", "")
+			fmt.Printf("%s %-14s │        │       │ ⛨ BLOCKED: %s %s\n", ts, model, ruleType, message)
+		}
+	} else {
+		fmt.Printf("%s %-14s │        │       │ ⛨ BLOCKED\n", ts, model)
+	}
+}
+
+// extractViolations parses the policy_violations field from event data.
+// Returns a slice of violation maps, or nil if not present/invalid.
+func extractViolations(data map[string]interface{}) []map[string]interface{} {
+	raw, ok := data["policy_violations"]
+	if !ok || raw == nil {
+		return nil
+	}
+
+	// JSON unmarshaling gives us []interface{} for arrays
+	arr, ok := raw.([]interface{})
+	if !ok {
+		return nil
+	}
+
+	result := make([]map[string]interface{}, 0, len(arr))
+	for _, item := range arr {
+		if m, ok := item.(map[string]interface{}); ok {
+			result = append(result, m)
+		}
+	}
+	return result
 }
 
 func stringOrDefault(data map[string]interface{}, key, def string) string {

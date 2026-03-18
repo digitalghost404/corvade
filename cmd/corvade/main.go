@@ -31,6 +31,7 @@ func init() {
 	rootCmd.AddCommand(cli.NewDoctorCmd())
 	rootCmd.AddCommand(cli.NewSessionsCmd())
 	rootCmd.AddCommand(cli.NewInspectCmd())
+	rootCmd.AddCommand(cli.NewPoliciesCmd())
 }
 
 func main() {
