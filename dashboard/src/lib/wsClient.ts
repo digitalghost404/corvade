@@ -1,2 +1,10 @@
 import { CorvadeWS } from './ws';
-export const ws = new CorvadeWS();
+
+let _instance: CorvadeWS | null = null;
+
+export function getWS(): CorvadeWS {
+  if (!_instance) {
+    _instance = new CorvadeWS();
+  }
+  return _instance;
+}

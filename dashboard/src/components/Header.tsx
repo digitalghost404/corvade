@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ws } from '@/lib/wsClient';
+import { getWS } from '@/lib/wsClient';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4401';
 
@@ -15,8 +15,8 @@ export default function Header() {
     fetch(`${API_BASE}/api/stats`)
       .then((r) => r.json())
       .then((data) => {
-        setTraceCount(data.traces ?? 0);
-        setCost(data.cost ?? 0);
+        setTraceCount(data.trace_count ?? 0);
+        setCost(data.total_cost ?? 0);
       })
       .catch(() => {
         setTraceCount(0);
@@ -33,12 +33,13 @@ export default function Header() {
       flashTimer.current = setTimeout(() => setFlashing(false), 200);
     };
 
-    ws.on('trace:new', handleTraceNew);
-    ws.connect();
+    const wsClient = getWS();
+    wsClient.on('trace:new', handleTraceNew);
+    wsClient.connect();
 
     return () => {
-      ws.off('trace:new', handleTraceNew);
-      ws.disconnect();
+      wsClient.off('trace:new', handleTraceNew);
+      wsClient.disconnect();
       if (flashTimer.current) clearTimeout(flashTimer.current);
     };
   }, []);
