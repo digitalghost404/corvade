@@ -49,8 +49,8 @@ export default function StatsBar() {
         { label: 'Traces', value: stats.trace_count.toLocaleString() },
         { label: 'Tokens', value: stats.total_tokens.toLocaleString() },
         { label: 'Cost', value: `$${stats.total_cost.toFixed(4)}` },
-        { label: 'Agents', value: Object.keys(stats.by_agent).length.toLocaleString() },
-        { label: 'Models', value: Object.keys(stats.by_model).length.toLocaleString() },
+        { label: 'Agents', value: Object.keys(stats.by_agent ?? {}).length.toLocaleString() },
+        { label: 'Models', value: Object.keys(stats.by_model ?? {}).length.toLocaleString() },
       ]
     : [
         { label: 'Traces', value: '—' },
