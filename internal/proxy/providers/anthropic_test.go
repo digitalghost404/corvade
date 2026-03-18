@@ -166,6 +166,11 @@ func TestAnthropicExtractToolUse(t *testing.T) {
 			body: []byte(`{}`),
 			want: []ToolCall{},
 		},
+		{
+			name: "invalid json returns empty slice",
+			body: []byte(`{invalid}`),
+			want: []ToolCall{},
+		},
 	}
 
 	for _, tt := range tests {

@@ -159,6 +159,16 @@ func TestOpenAIExtractToolCalls(t *testing.T) {
 			body: []byte(`{}`),
 			want: []ToolCall{},
 		},
+		{
+			name: "invalid json returns empty slice",
+			body: []byte(`{invalid}`),
+			want: []ToolCall{},
+		},
+		{
+			name: "choices with no tool calls returns nil",
+			body: []byte(`{"choices":[{"message":{}}]}`),
+			want: []ToolCall{},
+		},
 	}
 
 	for _, tt := range tests {
