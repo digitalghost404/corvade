@@ -218,10 +218,10 @@ export default function StatsPage() {
 
   // Breakdown sorted lists
   const byModelEntries = stats
-    ? Object.entries(stats.by_model).sort((a, b) => b[1] - a[1])
+    ? Object.entries(stats.by_model ?? {}).sort((a, b) => b[1] - a[1])
     : [];
   const byAgentEntries = stats
-    ? Object.entries(stats.by_agent).sort((a, b) => b[1] - a[1])
+    ? Object.entries(stats.by_agent ?? {}).sort((a, b) => b[1] - a[1])
     : [];
   const maxModel = byModelEntries[0]?.[1] ?? 1;
   const maxAgent = byAgentEntries[0]?.[1] ?? 1;
