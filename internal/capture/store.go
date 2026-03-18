@@ -23,7 +23,24 @@ type TraceFilter struct {
 	SessionID *string
 	Provider  *string
 	Model     *string
+	Agent     *string
+	Search    *string
 	Limit     *int
+	Offset    *int
+}
+
+// SessionFilter specifies optional filters for listing sessions.
+type SessionFilter struct {
+	Agent  *string
+	Limit  *int
+	Offset *int
+}
+
+// Stats holds aggregate statistics across traces.
+type Stats struct {
+	TraceCount  int     `json:"trace_count"`
+	TotalCost   float64 `json:"total_cost"`
+	TotalTokens int     `json:"total_tokens"`
 }
 
 // Store is a SQLite-backed storage for traces, sessions, and graph data.
@@ -209,6 +226,15 @@ func (s *Store) ListTraces(f TraceFilter) ([]Trace, error) {
 		conditions = append(conditions, "model = ?")
 		args = append(args, *f.Model)
 	}
+	if f.Agent != nil {
+		conditions = append(conditions, "agent = ?")
+		args = append(args, *f.Agent)
+	}
+	if f.Search != nil {
+		conditions = append(conditions, "(request LIKE ? OR response LIKE ? OR model LIKE ? OR agent LIKE ?)")
+		pattern := "%" + *f.Search + "%"
+		args = append(args, pattern, pattern, pattern, pattern)
+	}
 
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
@@ -218,6 +244,9 @@ func (s *Store) ListTraces(f TraceFilter) ([]Trace, error) {
 
 	if f.Limit != nil {
 		query += fmt.Sprintf(" LIMIT %d", *f.Limit)
+	}
+	if f.Offset != nil {
+		query += fmt.Sprintf(" OFFSET %d", *f.Offset)
 	}
 
 	rows, err := s.db.Query(query, args...)
@@ -445,4 +474,92 @@ func (s *Store) GetSessionGraph(sessionID string) ([]GraphNode, []GraphEdge, err
 		edges = append(edges, e)
 	}
 	return nodes, edges, edgeRows.Err()
+}
+
+// ListSessionsFiltered returns sessions matching the given filter.
+func (s *Store) ListSessionsFiltered(f SessionFilter) ([]Session, error) {
+	query := `SELECT
+		id, agent, start_time, end_time, trace_count, total_tokens, total_cost, status, created_at
+		FROM sessions`
+
+	var conditions []string
+	var args []interface{}
+
+	if f.Agent != nil {
+		conditions = append(conditions, "agent = ?")
+		args = append(args, *f.Agent)
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	if f.Limit != nil {
+		query += fmt.Sprintf(" LIMIT %d", *f.Limit)
+	}
+	if f.Offset != nil {
+		query += fmt.Sprintf(" OFFSET %d", *f.Offset)
+	}
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []Session
+	for rows.Next() {
+		var sess Session
+		var startTime, createdAt string
+		var endTime *string
+
+		err := rows.Scan(
+			&sess.ID, &sess.Agent, &startTime, &endTime,
+			&sess.TraceCount, &sess.TotalTokens, &sess.TotalCost,
+			&sess.Status, &createdAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan session: %w", err)
+		}
+
+		sess.StartTime, _ = time.Parse(time.RFC3339Nano, startTime)
+		sess.CreatedAt, _ = time.Parse(time.RFC3339Nano, createdAt)
+		if endTime != nil {
+			t, _ := time.Parse(time.RFC3339Nano, *endTime)
+			sess.EndTime = &t
+		}
+		sessions = append(sessions, sess)
+	}
+	return sessions, rows.Err()
+}
+
+// GetStats returns aggregate statistics across all traces, optionally filtered
+// by a time range.
+func (s *Store) GetStats(from, to *time.Time) (Stats, error) {
+	query := `SELECT COUNT(*), COALESCE(SUM(cost), 0), COALESCE(SUM(COALESCE(tokens_prompt,0)+COALESCE(tokens_completion,0)), 0) FROM traces`
+
+	var conditions []string
+	var args []interface{}
+
+	if from != nil {
+		conditions = append(conditions, "created_at >= ?")
+		args = append(args, from.UTC().Format(time.RFC3339Nano))
+	}
+	if to != nil {
+		conditions = append(conditions, "created_at <= ?")
+		args = append(args, to.UTC().Format(time.RFC3339Nano))
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	var stats Stats
+	err := s.db.QueryRow(query, args...).Scan(&stats.TraceCount, &stats.TotalCost, &stats.TotalTokens)
+	if err != nil {
+		return Stats{}, fmt.Errorf("get stats: %w", err)
+	}
+	return stats, nil
 }
