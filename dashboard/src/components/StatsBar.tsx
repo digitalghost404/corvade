@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useScramble } from '@/hooks/useScramble';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4401';
 
@@ -18,9 +19,10 @@ interface Metric {
 }
 
 function MetricCard({ label, value }: Metric) {
+  const display = useScramble(value);
   return (
     <div className="glass neon-edge rounded-lg px-4 py-3 flex-1 min-w-0">
-      <div className="tabular-nums text-violet-400 text-lg font-semibold">{value}</div>
+      <div className="tabular-nums text-violet-400 text-lg font-semibold">{display}</div>
       <div className="text-zinc-400 text-xs uppercase tracking-wider mt-1">{label}</div>
     </div>
   );

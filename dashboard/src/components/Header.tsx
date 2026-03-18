@@ -69,6 +69,31 @@ function CorvadeLogo({
   );
 }
 
+function Waveform({ active, spiking }: { active: boolean; spiking: boolean }) {
+  return (
+    <svg width="16" height="12" viewBox="0 0 16 12" className="shrink-0" aria-hidden="true">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <rect
+          key={i}
+          x={i * 3.2}
+          width="2"
+          rx="1"
+          fill={active ? '#22c55e' : '#52525b'}
+          style={
+            spiking
+              ? { y: 1, height: 10 }
+              : active
+              ? {
+                  animation: `waveform-bar 0.8s ease-in-out ${i * 0.1}s infinite alternate`,
+                }
+              : { y: 5, height: 2 }
+          }
+        />
+      ))}
+    </svg>
+  );
+}
+
 export default function Header() {
   const [traceCount, setTraceCount] = useState<number | null>(null);
   const [cost, setCost] = useState<number | null>(null);
@@ -137,19 +162,8 @@ export default function Header() {
         <span className="font-semibold text-sm text-zinc-50">Corvade</span>
       </div>
       <div className="flex items-center gap-2">
-        {/* Heartbeat indicator */}
-        <span
-          className={hasTraces ? 'heartbeat' : ''}
-          style={{
-            display: 'inline-block',
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            backgroundColor: hasTraces ? '#22c55e' : '#52525b',
-            flexShrink: 0,
-          }}
-          aria-hidden="true"
-        />
+        {/* Waveform indicator */}
+        <Waveform active={hasTraces} spiking={noticing} />
         <span className="text-xs tabular-nums text-zinc-400">
           {statsText}
         </span>

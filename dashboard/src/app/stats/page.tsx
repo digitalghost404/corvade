@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useScramble } from '@/hooks/useScramble';
 import { fetchStats, fetchTraces } from '@/lib/api';
 import EmptyState from '@/components/EmptyState';
 
@@ -51,9 +52,10 @@ function fromForRange(range: Range): string | undefined {
 // ---------------------------------------------------------------------------
 
 function MetricCard({ label, value }: { label: string; value: string }) {
+  const display = useScramble(value);
   return (
     <div className="glass neon-edge rounded-lg p-4">
-      <div className="text-2xl font-semibold text-violet-400 tabular-nums">{value}</div>
+      <div className="text-2xl font-semibold text-violet-400 tabular-nums">{display}</div>
       <div className="text-zinc-400 text-xs uppercase tracking-wider mt-1">{label}</div>
     </div>
   );

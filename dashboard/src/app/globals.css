@@ -141,6 +141,12 @@
   animation: heartbeat 2s ease-in-out infinite;
 }
 
+/* Animated waveform bars */
+@keyframes waveform-bar {
+  0% { y: 8; height: 2; }
+  100% { y: 1; height: 10; }
+}
+
 /* Status row urgency patterns */
 .row-error {
   background-image: repeating-linear-gradient(
