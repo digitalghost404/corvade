@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none">
+  <!-- Circuit traces: left corner -->
+  <path d="M22 40 L10 40 L10 28" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <circle cx="10" cy="26" r="2" fill="#8b5cf6" opacity="0.5"/>
+
+  <!-- Circuit traces: right corner -->
+  <path d="M58 40 L70 40 L70 28" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <circle cx="70" cy="26" r="2" fill="#8b5cf6" opacity="0.5"/>
+
+  <!-- Circuit traces: upper-left branch from top of eye -->
+  <path d="M33 30 L33 20 L18 20" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <circle cx="16" cy="20" r="2" fill="#8b5cf6" opacity="0.5"/>
+
+  <!-- Circuit traces: upper-right branch from top of eye -->
+  <path d="M47 30 L47 20 L62 20" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <circle cx="64" cy="20" r="2" fill="#8b5cf6" opacity="0.5"/>
+
+  <!-- Additional lower-left trace -->
+  <path d="M28 46 L14 46 L14 56" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <circle cx="14" cy="58" r="2" fill="#8b5cf6" opacity="0.5"/>
+
+  <!-- Additional lower-right trace -->
+  <path d="M52 46 L66 46 L66 56" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <circle cx="66" cy="58" r="2" fill="#8b5cf6" opacity="0.5"/>
+
+  <!-- Eye outline: almond/pointed shape -->
+  <path d="M22 40 C28 28 52 28 58 40 C52 52 28 52 22 40 Z" stroke="#8b5cf6" stroke-width="2" fill="none"/>
+
+  <!-- Iris: solid violet circle -->
+  <circle cx="40" cy="40" r="9" fill="#8b5cf6"/>
+
+  <!-- Pupil: diamond cutout -->
+  <path d="M40 33 L46 40 L40 47 L34 40 Z" fill="#09090b"/>
+</svg>
